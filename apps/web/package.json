@@ -1,0 +1,6 @@
+{
+  "name": "@collab-planner/web",
+  "private": true,
+  "type": "module",
+  "scripts": {}
+}
