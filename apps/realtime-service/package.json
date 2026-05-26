@@ -1,0 +1,6 @@
+{
+  "name": "@collab-planner/realtime-service",
+  "private": true,
+  "type": "module",
+  "scripts": {}
+}

@@ -1,0 +1,2 @@
+class AiJob:
+    pass
