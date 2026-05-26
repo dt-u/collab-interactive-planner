@@ -1,0 +1,30 @@
+# Node, React, Frontend
+node_modules/
+dist/
+build/
+.next/
+*.log
+
+# Passwords, API Keys
+.env
+.env.*
+!.env.example
+
+# Python & AI Microservice
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+*.pt
+*.onnx
+*.weights
+.ipynb_checkpoints/
+
+# OS & IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.cursor/
