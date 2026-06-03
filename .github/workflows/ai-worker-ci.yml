@@ -1,0 +1,12 @@
+name: ai-worker-ci
+
+on:
+  pull_request:
+    paths:
+      - "apps/ai-worker/**"
+
+jobs:
+  placeholder:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "ai-worker CI placeholder"

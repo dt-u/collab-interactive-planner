@@ -1,0 +1,10 @@
+{
+  "name": "@collab-planner/eslint-config",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./base": "./base.js",
+    "./node": "./node.js",
+    "./react": "./react.js"
+  }
+}

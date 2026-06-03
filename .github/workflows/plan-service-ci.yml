@@ -1,0 +1,13 @@
+name: plan-service-ci
+
+on:
+  pull_request:
+    paths:
+      - "apps/plan-service/**"
+      - "packages/**"
+
+jobs:
+  placeholder:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "plan-service CI placeholder"

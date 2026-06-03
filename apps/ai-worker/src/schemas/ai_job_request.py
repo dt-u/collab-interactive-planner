@@ -1,0 +1,2 @@
+class AiJobRequest:
+    pass

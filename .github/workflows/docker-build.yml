@@ -1,0 +1,14 @@
+name: docker-build
+
+on:
+  pull_request:
+    paths:
+      - "apps/**/Dockerfile"
+      - "docker-compose*.yml"
+      - "infra/docker/**"
+
+jobs:
+  placeholder:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "docker build placeholder"

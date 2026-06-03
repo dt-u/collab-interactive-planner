@@ -1,0 +1,9 @@
+{
+  "name": "@collab-planner/tsconfig",
+  "private": true,
+  "exports": {
+    "./base": "./base.json",
+    "./node": "./node.json",
+    "./react": "./react.json"
+  }
+}

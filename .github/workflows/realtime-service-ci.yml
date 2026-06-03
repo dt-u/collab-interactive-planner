@@ -1,0 +1,13 @@
+name: realtime-service-ci
+
+on:
+  pull_request:
+    paths:
+      - "apps/realtime-service/**"
+      - "packages/**"
+
+jobs:
+  placeholder:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "realtime-service CI placeholder"

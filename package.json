@@ -1,0 +1,6 @@
+{
+  "name": "collab-interactive-planner",
+  "private": true,
+  "packageManager": "pnpm@9.0.0",
+  "scripts": {}
+}

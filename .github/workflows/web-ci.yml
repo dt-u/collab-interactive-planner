@@ -1,0 +1,13 @@
+name: web-ci
+
+on:
+  pull_request:
+    paths:
+      - "apps/web/**"
+      - "packages/**"
+
+jobs:
+  placeholder:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "web CI placeholder"
