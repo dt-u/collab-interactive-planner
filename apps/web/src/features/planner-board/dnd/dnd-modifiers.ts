@@ -1,1 +1,1 @@
-export const dndModifiers = {}
+export const dndModifiers = {};

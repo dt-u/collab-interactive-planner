@@ -1,3 +1,3 @@
 export function QueryProvider(): null {
-  return null
+  return null;
 }

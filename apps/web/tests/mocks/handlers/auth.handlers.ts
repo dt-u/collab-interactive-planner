@@ -1,1 +1,1 @@
-export const authHandlers = []
+export const authHandlers = [];

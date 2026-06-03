@@ -1,3 +1,3 @@
 export function PlannerListPage(): null {
-  return null
+  return null;
 }

@@ -1,2 +1,2 @@
-export { MediaUploader } from './components/MediaUploader'
-export type { MediaTypes } from './types/media.types'
+export { MediaUploader } from "./components/MediaUploader";
+export type { MediaTypes } from "./types/media.types";

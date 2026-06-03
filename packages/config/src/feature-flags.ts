@@ -1,3 +1,3 @@
 export interface FeatureFlagConfig {}
 
-export const featureFlagConfig: FeatureFlagConfig = {}
+export const featureFlagConfig: FeatureFlagConfig = {};

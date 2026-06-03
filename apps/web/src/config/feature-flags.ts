@@ -1,3 +1,3 @@
 export interface FeatureFlags {}
 
-export const featureFlags: FeatureFlags = {}
+export const featureFlags: FeatureFlags = {};

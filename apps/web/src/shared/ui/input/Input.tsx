@@ -1,3 +1,3 @@
 export function Input(): null {
-  return null
+  return null;
 }

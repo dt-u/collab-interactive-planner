@@ -1,3 +1,3 @@
 export function CollaborativeTextarea(): null {
-  return null
+  return null;
 }

@@ -1,1 +1,1 @@
-export const boardUiStore = {}
+export const boardUiStore = {};

@@ -1,3 +1,3 @@
 export interface RealtimeConfig {}
 
-export const realtimeConfig: RealtimeConfig = {}
+export const realtimeConfig: RealtimeConfig = {};

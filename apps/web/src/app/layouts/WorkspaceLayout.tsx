@@ -1,3 +1,3 @@
 export function WorkspaceLayout(): null {
-  return null
+  return null;
 }

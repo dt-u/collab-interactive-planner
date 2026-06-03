@@ -1,1 +1,1 @@
-export const plannerSchema = {}
+export const plannerSchema = {};

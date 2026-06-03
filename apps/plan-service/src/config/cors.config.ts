@@ -1,3 +1,3 @@
 export interface CorsConfig {}
 
-export const corsConfig: CorsConfig = {}
+export const corsConfig: CorsConfig = {};

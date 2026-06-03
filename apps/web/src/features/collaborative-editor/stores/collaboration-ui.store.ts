@@ -1,1 +1,1 @@
-export const collaborationUiStore = {}
+export const collaborationUiStore = {};

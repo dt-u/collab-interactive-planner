@@ -1,3 +1,3 @@
 export function PlannerSidebar(): null {
-  return null
+  return null;
 }

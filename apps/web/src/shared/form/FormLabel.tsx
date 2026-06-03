@@ -1,3 +1,3 @@
 export function FormLabel(): null {
-  return null
+  return null;
 }

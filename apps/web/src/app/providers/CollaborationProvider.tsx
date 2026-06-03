@@ -1,3 +1,3 @@
 export function CollaborationProvider(): null {
-  return null
+  return null;
 }

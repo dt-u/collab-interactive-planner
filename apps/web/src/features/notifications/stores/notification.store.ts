@@ -1,1 +1,1 @@
-export const notificationStore = {}
+export const notificationStore = {};

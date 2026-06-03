@@ -1,1 +1,1 @@
-export const realtimeHandlers = []
+export const realtimeHandlers = [];

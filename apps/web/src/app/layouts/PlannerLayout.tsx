@@ -1,3 +1,3 @@
 export function PlannerLayout(): null {
-  return null
+  return null;
 }

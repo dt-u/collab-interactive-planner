@@ -1,3 +1,3 @@
 export function FocusIndicator(): null {
-  return null
+  return null;
 }

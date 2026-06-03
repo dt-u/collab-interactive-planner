@@ -1,3 +1,3 @@
 export function Button(): null {
-  return null
+  return null;
 }

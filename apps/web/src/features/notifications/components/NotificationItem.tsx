@@ -1,3 +1,3 @@
 export function NotificationItem(): null {
-  return null
+  return null;
 }

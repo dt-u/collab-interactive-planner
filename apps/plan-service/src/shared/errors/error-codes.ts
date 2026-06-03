@@ -1,1 +1,1 @@
-export type ErrorCode = string
+export type ErrorCode = string;

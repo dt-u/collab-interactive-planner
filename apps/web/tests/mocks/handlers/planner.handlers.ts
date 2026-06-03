@@ -1,1 +1,1 @@
-export const plannerHandlers = []
+export const plannerHandlers = [];

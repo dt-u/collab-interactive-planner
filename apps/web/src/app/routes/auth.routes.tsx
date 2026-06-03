@@ -1,1 +1,1 @@
-export const authRoutes = []
+export const authRoutes = [];

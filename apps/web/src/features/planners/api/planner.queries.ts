@@ -1,1 +1,1 @@
-export const plannerQueries = {}
+export const plannerQueries = {};

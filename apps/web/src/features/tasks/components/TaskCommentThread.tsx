@@ -1,3 +1,3 @@
 export function TaskCommentThread(): null {
-  return null
+  return null;
 }

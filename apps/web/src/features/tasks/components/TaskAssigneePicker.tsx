@@ -1,3 +1,3 @@
 export function TaskAssigneePicker(): null {
-  return null
+  return null;
 }

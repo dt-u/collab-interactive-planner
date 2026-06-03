@@ -1,1 +1,1 @@
-export const plannerUiStore = {}
+export const plannerUiStore = {};

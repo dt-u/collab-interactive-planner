@@ -1,1 +1,1 @@
-export const commentSchema = {}
+export const commentSchema = {};

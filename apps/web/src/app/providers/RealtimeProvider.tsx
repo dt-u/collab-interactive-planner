@@ -1,3 +1,3 @@
 export function RealtimeProvider(): null {
-  return null
+  return null;
 }

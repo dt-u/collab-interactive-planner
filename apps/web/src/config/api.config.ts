@@ -1,3 +1,3 @@
 export interface ApiConfig {}
 
-export const apiConfig: ApiConfig = {}
+export const apiConfig: ApiConfig = {};

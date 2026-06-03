@@ -1,3 +1,3 @@
 export function ErrorState(): null {
-  return null
+  return null;
 }

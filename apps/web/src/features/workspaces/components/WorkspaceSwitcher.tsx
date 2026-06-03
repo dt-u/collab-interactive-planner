@@ -1,3 +1,3 @@
 export function WorkspaceSwitcher(): null {
-  return null
+  return null;
 }

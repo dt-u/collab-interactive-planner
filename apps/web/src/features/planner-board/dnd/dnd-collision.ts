@@ -1,1 +1,1 @@
-export const dndCollision = {}
+export const dndCollision = {};

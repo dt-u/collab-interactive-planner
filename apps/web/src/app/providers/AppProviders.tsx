@@ -1,3 +1,3 @@
 export function AppProviders(): null {
-  return null
+  return null;
 }

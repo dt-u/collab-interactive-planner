@@ -2,5 +2,16 @@
   "name": "collab-interactive-planner",
   "private": true,
   "packageManager": "pnpm@9.0.0",
-  "scripts": {}
+  "scripts": {
+    "dev": "concurrently -n \"api,realtime,web\" -c \"blue,green,magenta\" \"pnpm --filter @collab-planner/plan-service dev\" \"pnpm --filter @collab-planner/realtime-service dev\" \"pnpm --filter @collab-planner/web dev\"",
+    "build": "pnpm --recursive build",
+    "test": "pnpm --recursive test",
+    "lint": "pnpm --recursive lint",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,css,md,yml,yaml}\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "prettier": "^3.2.5",
+    "typescript": "^5.4.5"
+  }
 }

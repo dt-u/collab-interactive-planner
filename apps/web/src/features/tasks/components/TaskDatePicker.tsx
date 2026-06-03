@@ -1,3 +1,3 @@
 export function TaskDatePicker(): null {
-  return null
+  return null;
 }

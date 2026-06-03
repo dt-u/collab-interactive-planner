@@ -1,3 +1,3 @@
 export function PlannerStatusBar(): null {
-  return null
+  return null;
 }

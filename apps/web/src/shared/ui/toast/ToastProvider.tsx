@@ -1,3 +1,3 @@
 export function ToastProvider(): null {
-  return null
+  return null;
 }

@@ -1,1 +1,1 @@
-export const realtimeEventSchema = {}
+export const realtimeEventSchema = {};

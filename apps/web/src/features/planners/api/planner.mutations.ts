@@ -1,1 +1,1 @@
-export const plannerMutations = {}
+export const plannerMutations = {};

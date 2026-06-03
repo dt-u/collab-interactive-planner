@@ -2,5 +2,10 @@
   "name": "@collab-planner/web",
   "private": true,
   "type": "module",
-  "scripts": {}
+  "scripts": {
+    "dev": "vite --port 3000"
+  },
+  "devDependencies": {
+    "vite": "^5.1.6"
+  }
 }

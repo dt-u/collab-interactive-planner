@@ -1,3 +1,3 @@
 export interface WebSocketConfig {}
 
-export const websocketConfig: WebSocketConfig = {}
+export const websocketConfig: WebSocketConfig = {};

@@ -1,3 +1,3 @@
 export function CommentThread(): null {
-  return null
+  return null;
 }

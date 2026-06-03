@@ -1,1 +1,1 @@
-export type ServerEvent = string
+export type ServerEvent = string;

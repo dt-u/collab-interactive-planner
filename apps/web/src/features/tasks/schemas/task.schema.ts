@@ -1,1 +1,1 @@
-export const taskSchema = {}
+export const taskSchema = {};

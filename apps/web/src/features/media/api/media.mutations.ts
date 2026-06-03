@@ -1,1 +1,1 @@
-export const mediaMutations = {}
+export const mediaMutations = {};

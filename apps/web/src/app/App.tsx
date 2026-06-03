@@ -1,3 +1,3 @@
 export function App(): null {
-  return null
+  return null;
 }

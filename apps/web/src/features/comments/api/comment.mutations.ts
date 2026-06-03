@@ -1,1 +1,1 @@
-export const commentMutations = {}
+export const commentMutations = {};

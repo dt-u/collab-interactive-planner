@@ -1,1 +1,1 @@
-export const systemPresenceStore = {}
+export const systemPresenceStore = {};

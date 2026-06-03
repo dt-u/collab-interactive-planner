@@ -1,1 +1,1 @@
-export const PAGINATION_CONSTANTS = {}
+export const PAGINATION_CONSTANTS = {};

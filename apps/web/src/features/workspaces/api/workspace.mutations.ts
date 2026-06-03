@@ -1,1 +1,1 @@
-export const workspaceMutations = {}
+export const workspaceMutations = {};

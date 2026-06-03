@@ -1,3 +1,3 @@
 export function MediaPreview(): null {
-  return null
+  return null;
 }

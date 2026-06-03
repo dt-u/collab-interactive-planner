@@ -1,3 +1,3 @@
 export function NotificationPanel(): null {
-  return null
+  return null;
 }

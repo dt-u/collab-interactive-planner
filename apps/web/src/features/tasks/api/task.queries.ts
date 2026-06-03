@@ -1,1 +1,1 @@
-export const taskQueries = {}
+export const taskQueries = {};

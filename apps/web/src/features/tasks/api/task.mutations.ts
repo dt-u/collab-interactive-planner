@@ -1,1 +1,1 @@
-export const taskMutations = {}
+export const taskMutations = {};

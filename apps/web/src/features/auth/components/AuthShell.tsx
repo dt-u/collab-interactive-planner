@@ -1,3 +1,3 @@
 export function AuthShell(): null {
-  return null
+  return null;
 }

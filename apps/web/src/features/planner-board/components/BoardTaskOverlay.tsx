@@ -1,3 +1,3 @@
 export function BoardTaskOverlay(): null {
-  return null
+  return null;
 }

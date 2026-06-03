@@ -1,3 +1,3 @@
 export interface ApiResponse<TData = unknown> {
-  data?: TData
+  data?: TData;
 }

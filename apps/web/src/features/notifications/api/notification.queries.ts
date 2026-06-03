@@ -1,1 +1,1 @@
-export const notificationQueries = {}
+export const notificationQueries = {};

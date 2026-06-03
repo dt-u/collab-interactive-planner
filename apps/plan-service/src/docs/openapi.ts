@@ -1,3 +1,3 @@
 export interface OpenApiDocument {}
 
-export const openApiDocument: OpenApiDocument = {}
+export const openApiDocument: OpenApiDocument = {};

@@ -1,3 +1,3 @@
 export interface OAuthConfig {}
 
-export const oauthConfig: OAuthConfig = {}
+export const oauthConfig: OAuthConfig = {};

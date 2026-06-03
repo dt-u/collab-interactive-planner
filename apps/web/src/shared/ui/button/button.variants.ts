@@ -1,1 +1,1 @@
-export const buttonVariants = {}
+export const buttonVariants = {};

@@ -1,3 +1,3 @@
 export function id(): string {
-  return ''
+  return "";
 }

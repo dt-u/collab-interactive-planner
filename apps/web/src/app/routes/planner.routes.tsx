@@ -1,1 +1,1 @@
-export const plannerRoutes = []
+export const plannerRoutes = [];

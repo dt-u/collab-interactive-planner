@@ -1,3 +1,3 @@
 export function Tooltip(): null {
-  return null
+  return null;
 }

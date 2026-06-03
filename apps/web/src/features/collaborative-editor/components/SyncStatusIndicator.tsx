@@ -1,3 +1,3 @@
 export function SyncStatusIndicator(): null {
-  return null
+  return null;
 }

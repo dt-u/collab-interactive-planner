@@ -2,5 +2,10 @@
   "name": "@collab-planner/plan-service",
   "private": true,
   "type": "module",
-  "scripts": {}
+  "scripts": {
+    "dev": "tsx watch src/main.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.1"
+  }
 }

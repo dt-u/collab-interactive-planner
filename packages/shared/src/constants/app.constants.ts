@@ -1,1 +1,1 @@
-export const APP_CONSTANTS = {}
+export const APP_CONSTANTS = {};

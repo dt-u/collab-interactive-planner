@@ -1,3 +1,3 @@
 export function AiSuggestionPanel(): null {
-  return null
+  return null;
 }

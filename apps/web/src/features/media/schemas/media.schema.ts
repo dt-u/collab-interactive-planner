@@ -1,1 +1,1 @@
-export const mediaSchema = {}
+export const mediaSchema = {};

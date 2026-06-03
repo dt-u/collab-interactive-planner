@@ -1,3 +1,3 @@
 export function Select(): null {
-  return null
+  return null;
 }

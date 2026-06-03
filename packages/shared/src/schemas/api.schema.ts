@@ -1,1 +1,1 @@
-export const apiSchema = {}
+export const apiSchema = {};

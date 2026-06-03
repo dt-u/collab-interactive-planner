@@ -1,3 +1,3 @@
 export function WorkspaceMembersPage(): null {
-  return null
+  return null;
 }

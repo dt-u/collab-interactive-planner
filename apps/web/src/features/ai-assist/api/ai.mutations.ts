@@ -1,1 +1,1 @@
-export const aiMutations = {}
+export const aiMutations = {};

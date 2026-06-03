@@ -1,3 +1,3 @@
 export interface EnvironmentConfig {}
 
-export const environmentConfig: EnvironmentConfig = {}
+export const environmentConfig: EnvironmentConfig = {};

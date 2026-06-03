@@ -1,3 +1,3 @@
 export function Avatar(): null {
-  return null
+  return null;
 }

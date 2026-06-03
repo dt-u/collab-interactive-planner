@@ -1,1 +1,1 @@
-export const authStore = {}
+export const authStore = {};

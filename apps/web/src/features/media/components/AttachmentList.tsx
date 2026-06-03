@@ -1,3 +1,3 @@
 export function AttachmentList(): null {
-  return null
+  return null;
 }

@@ -1,1 +1,1 @@
-export const commentQueries = {}
+export const commentQueries = {};

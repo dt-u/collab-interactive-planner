@@ -1,3 +1,3 @@
 export interface CookieConfig {}
 
-export const cookieConfig: CookieConfig = {}
+export const cookieConfig: CookieConfig = {};

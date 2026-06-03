@@ -1,1 +1,1 @@
-export const workspaceQueries = {}
+export const workspaceQueries = {};

@@ -1,3 +1,3 @@
 export function BoardColumnHeader(): null {
-  return null
+  return null;
 }

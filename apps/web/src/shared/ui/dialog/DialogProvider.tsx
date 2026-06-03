@@ -1,3 +1,3 @@
 export function DialogProvider(): null {
-  return null
+  return null;
 }

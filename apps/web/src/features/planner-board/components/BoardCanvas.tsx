@@ -1,3 +1,3 @@
 export function BoardCanvas(): null {
-  return null
+  return null;
 }

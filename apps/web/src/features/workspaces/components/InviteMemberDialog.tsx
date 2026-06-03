@@ -1,3 +1,3 @@
 export function InviteMemberDialog(): null {
-  return null
+  return null;
 }

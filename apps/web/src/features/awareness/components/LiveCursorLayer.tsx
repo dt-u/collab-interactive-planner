@@ -1,3 +1,3 @@
 export function LiveCursorLayer(): null {
-  return null
+  return null;
 }

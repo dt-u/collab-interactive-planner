@@ -1,3 +1,3 @@
 export function RegisterPage(): null {
-  return null
+  return null;
 }

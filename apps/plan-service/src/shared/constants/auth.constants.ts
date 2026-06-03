@@ -1,1 +1,1 @@
-export const AUTH_CONSTANTS = {}
+export const AUTH_CONSTANTS = {};

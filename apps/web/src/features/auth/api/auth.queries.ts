@@ -1,1 +1,1 @@
-export const authQueries = {}
+export const authQueries = {};

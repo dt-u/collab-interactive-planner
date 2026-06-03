@@ -1,1 +1,1 @@
-export const workspaceSchema = {}
+export const workspaceSchema = {};

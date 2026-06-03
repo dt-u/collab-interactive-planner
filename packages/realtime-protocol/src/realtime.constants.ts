@@ -1,1 +1,1 @@
-export const REALTIME_CONSTANTS = {}
+export const REALTIME_CONSTANTS = {};

@@ -1,1 +1,1 @@
-export type PlannerOperationType = string
+export type PlannerOperationType = string;

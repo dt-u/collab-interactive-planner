@@ -1,1 +1,1 @@
-export const queryKeys = {}
+export const queryKeys = {};

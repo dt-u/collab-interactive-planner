@@ -1,1 +1,1 @@
-export const aiQueries = {}
+export const aiQueries = {};

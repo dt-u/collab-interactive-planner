@@ -1,3 +1,3 @@
 export function WorkspaceCard(): null {
-  return null
+  return null;
 }

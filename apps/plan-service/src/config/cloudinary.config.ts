@@ -1,3 +1,3 @@
 export interface CloudinaryConfig {}
 
-export const cloudinaryConfig: CloudinaryConfig = {}
+export const cloudinaryConfig: CloudinaryConfig = {};

@@ -1,1 +1,1 @@
-export const workspaceUiStore = {}
+export const workspaceUiStore = {};

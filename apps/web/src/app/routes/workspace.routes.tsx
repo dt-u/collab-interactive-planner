@@ -1,1 +1,1 @@
-export const workspaceRoutes = []
+export const workspaceRoutes = [];

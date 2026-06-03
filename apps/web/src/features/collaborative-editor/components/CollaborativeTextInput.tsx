@@ -1,3 +1,3 @@
 export function CollaborativeTextInput(): null {
-  return null
+  return null;
 }

@@ -1,3 +1,3 @@
 export function cn(): string {
-  return ''
+  return "";
 }
