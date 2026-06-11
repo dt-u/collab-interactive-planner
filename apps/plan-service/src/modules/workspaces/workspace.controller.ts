@@ -1,1 +1,106 @@
-export class WorkspaceController {}
+import { Request, Response, NextFunction } from "express";
+import { WorkspaceService } from "./workspace.service.js";
+
+export class WorkspaceController {
+  constructor(
+    private workspaceService: WorkspaceService = new WorkspaceService(),
+  ) {}
+
+  create = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const { name } = req.body;
+      const ownerId = req.user?.userId;
+      if (!ownerId) {
+        res
+          .status(401)
+          .json({ success: false, error: { message: "Unauthorized" } });
+        return;
+      }
+      const workspace = await this.workspaceService.createWorkspace(
+        name,
+        ownerId,
+      );
+      res.status(201).json({ success: true, data: workspace });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  list = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const userId = req.user?.userId;
+      if (!userId) {
+        res
+          .status(401)
+          .json({ success: false, error: { message: "Unauthorized" } });
+        return;
+      }
+      const list = await this.workspaceService.getUserWorkspaces(userId);
+      res.status(200).json({ success: true, data: list });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  get = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const workspaceId = req.params.id;
+      const userId = req.user?.userId;
+      if (!userId) {
+        res
+          .status(401)
+          .json({ success: false, error: { message: "Unauthorized" } });
+        return;
+      }
+      const workspace = await this.workspaceService.getWorkspaceDetails(
+        workspaceId,
+        userId,
+      );
+      res.status(200).json({ success: true, data: workspace });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  invite = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const workspaceId = req.params.id;
+      const inviterId = req.user?.userId;
+      const { email, role } = req.body;
+
+      if (!inviterId) {
+        res
+          .status(401)
+          .json({ success: false, error: { message: "Unauthorized" } });
+        return;
+      }
+
+      const updatedWorkspace = await this.workspaceService.inviteMember(
+        workspaceId,
+        inviterId,
+        email,
+        role,
+      );
+
+      res.status(200).json({ success: true, data: updatedWorkspace });
+    } catch (error) {
+      next(error);
+    }
+  };
+}
