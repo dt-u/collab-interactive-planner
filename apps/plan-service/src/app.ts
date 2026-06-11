@@ -19,6 +19,7 @@ export function createApp(): Express {
   const apiRouter = Router();
   registerRoutes(apiRouter);
   app.use("/api", apiRouter);
+  app.use("/", apiRouter);
 
   app.use(errorHandler);
 
