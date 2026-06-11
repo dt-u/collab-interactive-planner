@@ -1,2 +1,2 @@
-export * from "./env";
-export * from "./feature-flags";
+export * from "./env.js";
+export * from "./feature-flags.js";
