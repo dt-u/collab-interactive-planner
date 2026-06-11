@@ -1,5 +1,18 @@
-export interface TransactionContext {}
+import mongoose from "mongoose";
 
-export function createTransactionContext(): TransactionContext {
-  return {};
+export async function withTransaction<T>(
+  fn: (session: mongoose.ClientSession) => Promise<T>,
+): Promise<T> {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const result = await fn(session);
+    await session.commitTransaction();
+    return result;
+  } catch (error) {
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    session.endSession();
+  }
 }
