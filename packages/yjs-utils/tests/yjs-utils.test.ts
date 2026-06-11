@@ -7,10 +7,7 @@ import {
   getSharedColumns,
   getSharedItems,
 } from "../src/document-schema.js";
-import {
-  encodeStateAsUpdate,
-  applyUpdateToDoc,
-} from "../src/encode-update.js";
+import { encodeStateAsUpdate, applyUpdateToDoc } from "../src/encode-update.js";
 import {
   encodeStateVector,
   encodeStateAsUpdateWithVector,

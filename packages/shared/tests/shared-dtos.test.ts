@@ -44,7 +44,7 @@ describe("Shared Package - Workspace DTOs Schemas", () => {
 
     const tooShort = { name: "A" };
     expect(createWorkspaceRequestSchema.safeParse(tooShort).success).toBe(
-      false
+      false,
     );
   });
 });
