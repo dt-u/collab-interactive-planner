@@ -1,12 +1,18 @@
-import http from "http";
+import { createServer } from "./server.js";
+import { environmentConfig } from "@collab-planner/config";
 
-const port = process.env.PORT || 3001;
+const port = Number(environmentConfig.PLAN_SERVICE_PORT || 3001);
 
-const server = http.createServer((req, res) => {
-  res.writeHead(200, { "Content-Type": "application/json" });
-  res.end(JSON.stringify({ service: "plan-service", status: "ok" }));
-});
+async function start(): Promise<void> {
+  try {
+    const server = await createServer();
+    server.listen(port, "0.0.0.0", () => {
+      console.log(`🚀 plan-service is listening on 0.0.0.0:${port}`);
+    });
+  } catch (error) {
+    console.error("💥 Failed to start server:", error);
+    process.exit(1);
+  }
+}
 
-server.listen(Number(port), "0.0.0.0", () => {
-  console.log(`plan-service is listening on 0.0.0.0:${port}`);
-});
+start();

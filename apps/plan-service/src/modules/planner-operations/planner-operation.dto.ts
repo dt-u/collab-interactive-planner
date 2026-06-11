@@ -1,1 +1,1 @@
-export interface PlannerOperationDto {}
+export { PlannerOperationDto } from "@collab-planner/shared";
