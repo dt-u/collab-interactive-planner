@@ -86,6 +86,11 @@ httpClient.interceptors.response.use(
         }
 
         setAccessToken(newAccessToken);
+        window.dispatchEvent(
+          new CustomEvent("auth:token-refreshed", {
+            detail: { accessToken: newAccessToken },
+          }),
+        );
         processQueue(null, newAccessToken);
         
         if (originalRequest.headers) {
