@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import * as Y from "yjs";
+import { useParams } from "react-router-dom";
 import { useYjsDocument } from "../../collaborative-editor/hooks/useYjsDocument.js";
 import { httpClient } from "../../../shared/api/http-client.js";
 import { X, Send, Paperclip, MessageSquare, Trash2, Calendar, FileText } from "lucide-react";
@@ -32,7 +33,7 @@ interface MediaDto {
   fileSize: number;
   mimeType: string;
   uploaderId: string;
-  createdAt: string;
+  createdAt: Date; // wait, let's keep it as is
 }
 
 export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
@@ -41,6 +42,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   taskId,
   yDoc,
 }) => {
+  const { planId } = useParams<{ planId: string }>();
   const { task, updateTask } = useYjsDocument(yDoc, taskId);
   
   // Local state to avoid input lag
@@ -68,26 +70,26 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const fetchComments = useCallback(async () => {
     try {
       setCommentsLoading(true);
-      const res = await httpClient.get(`/items/${taskId}/comments`);
+      const res = await httpClient.get(`/items/${taskId}/comments`, { params: { planId } });
       setComments(res.data?.data || []);
     } catch (err) {
       console.error("❌ Failed to fetch comments:", err);
     } finally {
       setCommentsLoading(false);
     }
-  }, [taskId]);
+  }, [taskId, planId]);
 
   const fetchMedia = useCallback(async () => {
     try {
       setMediaLoading(true);
-      const res = await httpClient.get(`/items/${taskId}/media`);
+      const res = await httpClient.get(`/items/${taskId}/media`, { params: { planId } });
       setMedia(res.data?.data || []);
     } catch (err) {
       console.error("❌ Failed to fetch media:", err);
     } finally {
       setMediaLoading(false);
     }
-  }, [taskId]);
+  }, [taskId, planId]);
 
   useEffect(() => {
     if (isOpen && taskId) {
@@ -118,7 +120,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     if (!newComment.trim()) return;
 
     try {
-      await httpClient.post(`/items/${taskId}/comments`, { content: newComment });
+      await httpClient.post(`/items/${taskId}/comments`, { content: newComment }, { params: { planId } });
       setNewComment("");
       await fetchComments();
     } catch (err) {
@@ -128,7 +130,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
   const handleDeleteComment = async (commentId: string) => {
     try {
-      await httpClient.delete(`/comments/${commentId}`);
+      await httpClient.delete(`/comments/${commentId}`, { params: { planId } });
       await fetchComments();
     } catch (err) {
       console.error("❌ Failed to delete comment:", err);
@@ -145,7 +147,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
         fileUrl: mockFileUrl,
         fileSize: Math.floor(Math.random() * 5000000) + 10000,
         mimeType: mockFileName.endsWith(".pdf") ? "application/pdf" : "image/png",
-      });
+      }, { params: { planId } });
       setMockFileName("");
       setMockFileUrl("");
       await fetchMedia();
@@ -156,7 +158,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
   const handleDeleteMedia = async (mediaId: string) => {
     try {
-      await httpClient.delete(`/media/${mediaId}`);
+      await httpClient.delete(`/media/${mediaId}`, { params: { planId } });
       await fetchMedia();
     } catch (err) {
       console.error("❌ Failed to delete media attachment:", err);

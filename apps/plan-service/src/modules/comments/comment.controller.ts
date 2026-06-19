@@ -19,10 +19,12 @@ export class CommentController {
         return;
       }
 
+      const planId = (req.query.planId || req.body.planId) as string;
       const comment = await this.commentService.createComment(
         itemId,
         userId,
         req.body,
+        planId,
       );
 
       res.status(201).json({
@@ -49,9 +51,11 @@ export class CommentController {
         return;
       }
 
+      const planId = req.query.planId as string;
       const comments = await this.commentService.getItemComments(
         itemId,
         userId,
+        planId,
       );
 
       res.status(200).json({
@@ -78,7 +82,8 @@ export class CommentController {
         return;
       }
 
-      await this.commentService.deleteComment(id, userId);
+      const planId = req.query.planId as string;
+      await this.commentService.deleteComment(id, userId, planId);
 
       res.status(200).json({
         success: true,

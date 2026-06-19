@@ -19,10 +19,12 @@ export class MediaController {
         return;
       }
 
+      const planId = (req.query.planId || req.body.planId) as string;
       const media = await this.mediaService.createMedia(
         itemId,
         uploaderId,
         req.body,
+        planId,
       );
 
       res.status(201).json({
@@ -49,7 +51,8 @@ export class MediaController {
         return;
       }
 
-      const media = await this.mediaService.getItemMedia(itemId, userId);
+      const planId = req.query.planId as string;
+      const media = await this.mediaService.getItemMedia(itemId, userId, planId);
 
       res.status(200).json({
         success: true,
@@ -75,7 +78,8 @@ export class MediaController {
         return;
       }
 
-      await this.mediaService.deleteMedia(id, userId);
+      const planId = req.query.planId as string;
+      await this.mediaService.deleteMedia(id, userId, planId);
 
       res.status(200).json({
         success: true,

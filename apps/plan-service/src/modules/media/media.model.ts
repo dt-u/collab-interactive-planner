@@ -2,7 +2,7 @@ import mongoose, { Schema, Document } from "mongoose";
 
 export interface IMedia extends Document {
   _id: mongoose.Types.ObjectId;
-  itemId: mongoose.Types.ObjectId;
+  itemId: string;
   fileName: string;
   fileUrl: string;
   fileSize: number;
@@ -15,8 +15,7 @@ export interface IMedia extends Document {
 const MediaSchema = new Schema<IMedia>(
   {
     itemId: {
-      type: Schema.Types.ObjectId,
-      ref: "PlannerItem",
+      type: String,
       required: true,
       index: true,
     },

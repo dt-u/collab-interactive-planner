@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { MediaRepository } from "./media.repository.js";
 import { PlannerItemRepository } from "../planner-items/planner-item.repository.js";
 import { PlannerRepository } from "../planners/planner.repository.js";
@@ -14,20 +15,41 @@ export class MediaService {
     private workspaceRepository: WorkspaceRepository = new WorkspaceRepository(),
   ) {}
 
-  private async checkItemAccess(itemId: string, userId: string) {
-    const item = await this.itemRepository.findById(itemId);
-    if (!item) {
-      throw new AppError("Planner item not found", 404, "ITEM_NOT_FOUND");
+  private async checkItemAccess(itemId: string, userId: string, planId?: string) {
+    let workspaceId: string;
+    let item: any = null;
+    let plan: any = null;
+
+    const isValidObjectId = mongoose.Types.ObjectId.isValid(itemId);
+    if (isValidObjectId) {
+      item = await this.itemRepository.findById(itemId);
+      if (item) {
+        plan = await this.plannerRepository.findById(item.planId.toString());
+        if (!plan) {
+          throw new AppError("Plan not found", 404, "PLAN_NOT_FOUND");
+        }
+        workspaceId = plan.workspaceId.toString();
+      } else if (planId) {
+        plan = await this.plannerRepository.findById(planId);
+        if (!plan) {
+          throw new AppError("Plan not found", 404, "PLAN_NOT_FOUND");
+        }
+        workspaceId = plan.workspaceId.toString();
+      } else {
+        throw new AppError("Planner item not found", 404, "ITEM_NOT_FOUND");
+      }
+    } else {
+      if (!planId) {
+        throw new AppError("planId query parameter is required for custom item IDs", 400, "PLAN_ID_REQUIRED");
+      }
+      plan = await this.plannerRepository.findById(planId);
+      if (!plan) {
+        throw new AppError("Plan not found", 404, "PLAN_NOT_FOUND");
+      }
+      workspaceId = plan.workspaceId.toString();
     }
 
-    const plan = await this.plannerRepository.findById(item.planId.toString());
-    if (!plan) {
-      throw new AppError("Plan not found", 404, "PLAN_NOT_FOUND");
-    }
-
-    const workspace = await this.workspaceRepository.findById(
-      plan.workspaceId.toString(),
-    );
+    const workspace = await this.workspaceRepository.findById(workspaceId);
     if (!workspace) {
       throw new AppError("Workspace not found", 404, "WORKSPACE_NOT_FOUND");
     }
@@ -55,8 +77,9 @@ export class MediaService {
       fileSize: number;
       mimeType: string;
     },
+    planId?: string,
   ): Promise<MediaDto> {
-    await this.checkItemAccess(itemId, uploaderId);
+    await this.checkItemAccess(itemId, uploaderId, planId);
 
     const media = await this.mediaRepository.create({
       itemId: itemId as any,
@@ -70,21 +93,22 @@ export class MediaService {
     return MediaMapper.toDto(media);
   }
 
-  async getItemMedia(itemId: string, userId: string): Promise<MediaDto[]> {
-    await this.checkItemAccess(itemId, userId);
+  async getItemMedia(itemId: string, userId: string, planId?: string): Promise<MediaDto[]> {
+    await this.checkItemAccess(itemId, userId, planId);
     const list = await this.mediaRepository.findByItem(itemId);
     return list.map((m) => MediaMapper.toDto(m));
   }
 
-  async deleteMedia(mediaId: string, userId: string): Promise<void> {
+  async deleteMedia(mediaId: string, userId: string, planId?: string): Promise<void> {
     const media = await this.mediaRepository.findById(mediaId);
     if (!media) {
       throw new AppError("Media not found", 404, "MEDIA_NOT_FOUND");
     }
 
     const { workspace } = await this.checkItemAccess(
-      media.itemId.toString(),
+      media.itemId,
       userId,
+      planId,
     );
 
     const isUploader = media.uploaderId.toString() === userId;

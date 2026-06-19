@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { CommentRepository } from "./comment.repository.js";
 import { PlannerItemRepository } from "../planner-items/planner-item.repository.js";
 import { PlannerRepository } from "../planners/planner.repository.js";
@@ -14,20 +15,41 @@ export class CommentService {
     private workspaceRepository: WorkspaceRepository = new WorkspaceRepository(),
   ) {}
 
-  private async checkItemAccess(itemId: string, userId: string) {
-    const item = await this.itemRepository.findById(itemId);
-    if (!item) {
-      throw new AppError("Planner item not found", 404, "ITEM_NOT_FOUND");
+  private async checkItemAccess(itemId: string, userId: string, planId?: string) {
+    let workspaceId: string;
+    let item: any = null;
+    let plan: any = null;
+
+    const isValidObjectId = mongoose.Types.ObjectId.isValid(itemId);
+    if (isValidObjectId) {
+      item = await this.itemRepository.findById(itemId);
+      if (item) {
+        plan = await this.plannerRepository.findById(item.planId.toString());
+        if (!plan) {
+          throw new AppError("Plan not found", 404, "PLAN_NOT_FOUND");
+        }
+        workspaceId = plan.workspaceId.toString();
+      } else if (planId) {
+        plan = await this.plannerRepository.findById(planId);
+        if (!plan) {
+          throw new AppError("Plan not found", 404, "PLAN_NOT_FOUND");
+        }
+        workspaceId = plan.workspaceId.toString();
+      } else {
+        throw new AppError("Planner item not found", 404, "ITEM_NOT_FOUND");
+      }
+    } else {
+      if (!planId) {
+        throw new AppError("planId query parameter is required for custom item IDs", 400, "PLAN_ID_REQUIRED");
+      }
+      plan = await this.plannerRepository.findById(planId);
+      if (!plan) {
+        throw new AppError("Plan not found", 404, "PLAN_NOT_FOUND");
+      }
+      workspaceId = plan.workspaceId.toString();
     }
 
-    const plan = await this.plannerRepository.findById(item.planId.toString());
-    if (!plan) {
-      throw new AppError("Plan not found", 404, "PLAN_NOT_FOUND");
-    }
-
-    const workspace = await this.workspaceRepository.findById(
-      plan.workspaceId.toString(),
-    );
+    const workspace = await this.workspaceRepository.findById(workspaceId);
     if (!workspace) {
       throw new AppError("Workspace not found", 404, "WORKSPACE_NOT_FOUND");
     }
@@ -50,8 +72,9 @@ export class CommentService {
     itemId: string,
     userId: string,
     data: CreateCommentRequest,
+    planId?: string,
   ): Promise<CommentDto> {
-    await this.checkItemAccess(itemId, userId);
+    await this.checkItemAccess(itemId, userId, planId);
 
     const comment = await this.commentRepository.create({
       itemId: itemId as any,
@@ -68,21 +91,22 @@ export class CommentService {
     return CommentMapper.toDto(populated);
   }
 
-  async getItemComments(itemId: string, userId: string): Promise<CommentDto[]> {
-    await this.checkItemAccess(itemId, userId);
+  async getItemComments(itemId: string, userId: string, planId?: string): Promise<CommentDto[]> {
+    await this.checkItemAccess(itemId, userId, planId);
     const list = await this.commentRepository.findByItem(itemId);
     return list.map((c) => CommentMapper.toDto(c));
   }
 
-  async deleteComment(commentId: string, userId: string): Promise<void> {
+  async deleteComment(commentId: string, userId: string, planId?: string): Promise<void> {
     const comment = await this.commentRepository.findById(commentId);
     if (!comment) {
       throw new AppError("Comment not found", 404, "COMMENT_NOT_FOUND");
     }
 
     const { workspace } = await this.checkItemAccess(
-      comment.itemId.toString(),
+      comment.itemId,
       userId,
+      planId,
     );
 
     const isAuthor = comment.userId.toString() === userId;
