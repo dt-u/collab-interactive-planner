@@ -1,1 +1,160 @@
-export function useYjsDocument(): void {}
+import { useEffect, useState, useCallback, useRef } from "react";
+import * as Y from "yjs";
+import { getSharedItems, getSharedColumns, YJS_KEYS, YjsPlannerItem } from "@collab-planner/yjs-utils";
+
+export interface TaskState {
+  id: string;
+  title: string;
+  description: string;
+  status: "todo" | "in_progress" | "done";
+  assignees: string[];
+}
+
+/**
+ * Hook to manage reactive Yjs task document updates at card level.
+ * Subscribes only to changes in the specific task to prevent board-wide re-renders.
+ */
+export function useYjsDocument(yDoc: Y.Doc | undefined, taskId: string) {
+  const [task, setTask] = useState<TaskState | null>(null);
+
+  useEffect(() => {
+    if (!yDoc) return;
+
+    const itemsMap = getSharedItems(yDoc);
+    
+    const getTaskFromMap = (map: Y.Map<any> | undefined): TaskState | null => {
+      if (!map) return null;
+      return {
+        id: taskId,
+        title: map.get("title") || "",
+        description: map.get("description") || "",
+        status: map.get("status") || "todo",
+        assignees: map.get("assignees") || [],
+      };
+    };
+
+    // Initialize state
+    const currentMap = itemsMap.get(taskId) as Y.Map<any> | undefined;
+    setTask(getTaskFromMap(currentMap));
+
+    const handleTaskChange = () => {
+      const updatedMap = itemsMap.get(taskId) as Y.Map<any> | undefined;
+      setTask(getTaskFromMap(updatedMap));
+    };
+
+    // 1. Listen to mutations inside this specific task's Map
+    let taskMapObserver: (() => void) | null = null;
+    
+    const setupTaskMapObserver = (map: Y.Map<any>) => {
+      if (taskMapObserver) return;
+      taskMapObserver = () => {
+        handleTaskChange();
+      };
+      map.observe(taskMapObserver);
+    };
+
+    if (currentMap) {
+      setupTaskMapObserver(currentMap);
+    }
+
+    // 2. Listen to additions/removals of the task itself in the items collection
+    const itemsObserver = (event: Y.YMapEvent<any>) => {
+      if (event.keysChanged.has(taskId)) {
+        const newMap = itemsMap.get(taskId) as Y.Map<any> | undefined;
+        if (newMap) {
+          setupTaskMapObserver(newMap);
+        } else {
+          taskMapObserver = null;
+        }
+        handleTaskChange();
+      }
+    };
+
+    itemsMap.observe(itemsObserver);
+
+    return () => {
+      itemsMap.unobserve(itemsObserver);
+      if (taskMapObserver && currentMap) {
+        currentMap.unobserve(taskMapObserver);
+      }
+    };
+  }, [yDoc, taskId]);
+
+  // Update properties of the task
+  const updateTask = useCallback(
+    (updates: Partial<Omit<TaskState, "id">>) => {
+      if (!yDoc) return;
+      const itemsMap = getSharedItems(yDoc);
+      const itemMap = itemsMap.get(taskId) as Y.Map<any> | undefined;
+      if (!itemMap) return;
+
+      yDoc.transact(() => {
+        Object.entries(updates).forEach(([key, value]) => {
+          itemMap.set(key, value);
+        });
+      });
+    },
+    [yDoc, taskId]
+  );
+
+  return { task, updateTask };
+}
+
+/**
+ * Hook to manage reactive board columns with Mutation Lock Guard support.
+ * Subscribes to changes in columns layout only.
+ */
+export function useYjsColumns(yDoc: Y.Doc | undefined, isDraggingLocal: boolean) {
+  const [columns, setColumns] = useState<Record<string, string[]>>({
+    todo: [],
+    in_progress: [],
+    done: [],
+  });
+
+  const bufferedColumns = useRef<Record<string, string[]> | null>(null);
+
+  useEffect(() => {
+    if (!yDoc) return;
+
+    const columnsMap = getSharedColumns(yDoc);
+
+    const syncState = () => {
+      const newColumns: Record<string, string[]> = {
+        todo: [],
+        in_progress: [],
+        done: [],
+      };
+      
+      columnsMap.forEach((array, key) => {
+        newColumns[key] = array.toArray();
+      });
+
+      if (isDraggingLocal) {
+        bufferedColumns.current = newColumns;
+      } else {
+        setColumns(newColumns);
+        bufferedColumns.current = null;
+      }
+    };
+
+    if (!isDraggingLocal && bufferedColumns.current) {
+      setColumns(bufferedColumns.current);
+      bufferedColumns.current = null;
+    } else if (columns.todo.length === 0 && columns.in_progress.length === 0 && columns.done.length === 0) {
+      // Run initial load
+      syncState();
+    }
+
+    const observer = () => {
+      syncState();
+    };
+
+    columnsMap.observeDeep(observer);
+
+    return () => {
+      columnsMap.unobserveDeep(observer);
+    };
+  }, [yDoc, isDraggingLocal]);
+
+  return columns;
+}
