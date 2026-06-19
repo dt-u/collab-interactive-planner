@@ -102,7 +102,7 @@ export const WorkspaceListPage: React.FC = () => {
 
     try {
       setInviteLoading(true);
-      await httpClient.post(`/workspaces/${selectedWorkspaceId}/members`, {
+      await httpClient.post(`/workspaces/${selectedWorkspaceId}/invite`, {
         email: inviteEmail,
         role: inviteRole
       });
