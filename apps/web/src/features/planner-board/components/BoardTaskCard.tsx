@@ -1,9 +1,11 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import * as Y from "yjs";
+import { useParams } from "react-router-dom";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useYjsDocument } from "../../collaborative-editor/hooks/useYjsDocument.js";
-import { FileText } from "lucide-react";
+import { Clock, DollarSign, FileText } from "lucide-react";
+import { httpClient } from "../../../shared/api/http-client.js";
 
 interface BoardTaskCardProps {
   taskId: string;
@@ -22,8 +24,32 @@ export const BoardTaskCard: React.FC<BoardTaskCardProps> = ({
   onClick,
   focusingCollaborators,
 }) => {
+  const { planId } = useParams<{ planId: string }>();
   const { task } = useYjsDocument(yDoc, taskId);
-  
+  const [fallbackImage, setFallbackImage] = useState<string | null>(null);
+
+  // Fetch attachments to use as cover fallback if task.image is empty
+  useEffect(() => {
+    const fetchAttachmentsFallback = async () => {
+      if (!task || task.image) return;
+      try {
+        const res = await httpClient.get(`/items/${taskId}/media`, { params: { planId } });
+        const mediaList = res.data?.data || [];
+        const firstImage = mediaList.find((m: any) => 
+          m.mimeType?.startsWith("image/") || 
+          /\.(jpg|jpeg|png|gif|webp)$/i.test(m.fileName)
+        );
+        if (firstImage) {
+          setFallbackImage(firstImage.fileUrl);
+        }
+      } catch (err) {
+        // Silent catch to prevent console pollution on empty states
+      }
+    };
+
+    fetchAttachmentsFallback();
+  }, [taskId, task?.image, planId]);
+
   const {
     attributes,
     listeners,
@@ -33,13 +59,20 @@ export const BoardTaskCard: React.FC<BoardTaskCardProps> = ({
     isDragging,
   } = useSortable({ id: taskId });
 
+  const isFocusedByRemote = focusingCollaborators.length > 0;
+  const focusColor = isFocusedByRemote ? focusingCollaborators[0].color : undefined;
+
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.4 : 1,
+    opacity: isDragging ? 0.3 : 1,
+    border: focusColor ? `2px solid ${focusColor}` : undefined,
+    boxShadow: focusColor ? `0 0 15px ${focusColor}` : undefined,
   };
 
   if (!task) return null;
+
+  const coverSrc = task.image || fallbackImage;
 
   return (
     <div
@@ -47,24 +80,49 @@ export const BoardTaskCard: React.FC<BoardTaskCardProps> = ({
       style={style}
       {...attributes}
       {...listeners}
-      className="task-card"
+      className={`task-card ${isFocusedByRemote ? "card-focused-remote" : ""}`}
       onClick={onClick}
     >
-      <div className="task-card-title">{task.title || "Untitled Task"}</div>
-      {task.description && (
-        <div className="task-card-desc">{task.description}</div>
+      {/* Cover Image / Gradient */}
+      {coverSrc ? (
+        <div className="task-card-cover-container">
+          <img src={coverSrc} alt={task.title} className="task-card-cover" />
+        </div>
+      ) : (
+        <div className="task-card-cover-container neon-gradient-cover" />
       )}
+
+      {/* Time Badge (Glassmorphic) */}
+      <div className="time-badge">
+        <Clock size={11} className="time-badge-icon" />
+        <span>{task.time || "Flexible"}</span>
+      </div>
+
+      <div className="task-card-content" style={{ marginTop: 12 }}>
+        <div className="task-card-title">{task.title || "Untitled Activity"}</div>
+        {task.description && (
+          <div className="task-card-desc">{task.description}</div>
+        )}
+      </div>
       
-      <div className="task-card-footer">
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <FileText size={12} style={{ color: "var(--text-muted)" }} />
-          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-            Details
-          </span>
+      <div className="task-card-footer" style={{ marginTop: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {/* Cost Tag */}
+          <div className="cost-tag">
+            <DollarSign size={12} style={{ marginRight: 2 }} />
+            <span>{task.cost || "Free"}</span>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <FileText size={12} style={{ color: "var(--text-muted)" }} />
+            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+              Details
+            </span>
+          </div>
         </div>
 
         {/* Focusing Remote Users */}
-        {focusingCollaborators.length > 0 && (
+        {isFocusedByRemote && (
           <div className="task-card-assignees">
             {focusingCollaborators.map((c, i) => (
               <div
@@ -87,17 +145,6 @@ export const BoardTaskCard: React.FC<BoardTaskCardProps> = ({
           </div>
         )}
       </div>
-
-      {/* Focus border glow if remote users are viewing */}
-      {focusingCollaborators.length > 0 && (
-        <div
-          className="card-focus-indicator"
-          style={{
-            backgroundColor: focusingCollaborators[0].color,
-            boxShadow: `0 0 8px ${focusingCollaborators[0].color}`,
-          }}
-        />
-      )}
     </div>
   );
 };

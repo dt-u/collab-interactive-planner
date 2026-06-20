@@ -1,13 +1,29 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import * as Y from "yjs";
-import { getSharedItems, getSharedColumns, YJS_KEYS, YjsPlannerItem } from "@collab-planner/yjs-utils";
+import {
+  getSharedItems,
+  getSharedColumns,
+  getSharedColumnOrder,
+  getSharedColumnMetadata,
+  YJS_KEYS,
+  YjsPlannerItem,
+} from "@collab-planner/yjs-utils";
 
 export interface TaskState {
   id: string;
   title: string;
   description: string;
-  status: "todo" | "in_progress" | "done";
+  status: string; // maps to dynamic columnId/dayId
   assignees: string[];
+  time?: string;
+  cost?: string;
+  image?: string;
+}
+
+export interface ColumnMetadata {
+  id: string;
+  title: string;
+  date?: string;
 }
 
 /**
@@ -28,8 +44,11 @@ export function useYjsDocument(yDoc: Y.Doc | undefined, taskId: string) {
         id: taskId,
         title: map.get("title") || "",
         description: map.get("description") || "",
-        status: map.get("status") || "todo",
+        status: map.get("status") || "",
         assignees: map.get("assignees") || [],
+        time: map.get("time") || "",
+        cost: map.get("cost") || "",
+        image: map.get("image") || "",
       };
     };
 
@@ -102,45 +121,61 @@ export function useYjsDocument(yDoc: Y.Doc | undefined, taskId: string) {
 
 /**
  * Hook to manage reactive board columns with Mutation Lock Guard support.
- * Subscribes to changes in columns layout only.
+ * Subscribes to changes in columns layout and metadata.
  */
 export function useYjsColumns(yDoc: Y.Doc | undefined, isDraggingLocal: boolean) {
-  const [columns, setColumns] = useState<Record<string, string[]>>({
-    todo: [],
-    in_progress: [],
-    done: [],
-  });
+  const [columns, setColumns] = useState<Record<string, string[]>>({});
+  const [columnOrder, setColumnOrder] = useState<string[]>([]);
+  const [columnMetadata, setColumnMetadata] = useState<Record<string, ColumnMetadata>>({});
 
-  const bufferedColumns = useRef<Record<string, string[]> | null>(null);
+  const bufferedColumns = useRef<{
+    columns: Record<string, string[]>;
+    columnOrder: string[];
+    columnMetadata: Record<string, ColumnMetadata>;
+  } | null>(null);
 
   useEffect(() => {
     if (!yDoc) return;
 
     const columnsMap = getSharedColumns(yDoc);
+    const orderArray = getSharedColumnOrder(yDoc);
+    const metadataMap = getSharedColumnMetadata(yDoc);
 
     const syncState = () => {
-      const newColumns: Record<string, string[]> = {
-        todo: [],
-        in_progress: [],
-        done: [],
-      };
-      
+      const nextColumns: Record<string, string[]> = {};
       columnsMap.forEach((array, key) => {
-        newColumns[key] = array.toArray();
+        nextColumns[key] = array.toArray();
       });
 
+      const nextOrder = orderArray.toArray();
+
+      const nextMetadata: Record<string, ColumnMetadata> = {};
+      metadataMap.forEach((val: any, key) => {
+        nextMetadata[key] = val;
+      });
+
+      const updatedState = {
+        columns: nextColumns,
+        columnOrder: nextOrder,
+        columnMetadata: nextMetadata,
+      };
+
       if (isDraggingLocal) {
-        bufferedColumns.current = newColumns;
+        bufferedColumns.current = updatedState;
       } else {
-        setColumns(newColumns);
+        setColumns(nextColumns);
+        setColumnOrder(nextOrder);
+        setColumnMetadata(nextMetadata);
         bufferedColumns.current = null;
       }
     };
 
     if (!isDraggingLocal && bufferedColumns.current) {
-      setColumns(bufferedColumns.current);
+      setColumns(bufferedColumns.current.columns);
+      setColumnOrder(bufferedColumns.current.columnOrder);
+      setColumnMetadata(bufferedColumns.current.columnMetadata);
       bufferedColumns.current = null;
-    } else if (columns.todo.length === 0 && columns.in_progress.length === 0 && columns.done.length === 0) {
+    } else if (Object.keys(columns).length === 0) {
       // Run initial load
       syncState();
     }
@@ -150,11 +185,15 @@ export function useYjsColumns(yDoc: Y.Doc | undefined, isDraggingLocal: boolean)
     };
 
     columnsMap.observeDeep(observer);
+    orderArray.observe(observer);
+    metadataMap.observe(observer);
 
     return () => {
       columnsMap.unobserveDeep(observer);
+      orderArray.unobserve(observer);
+      metadataMap.unobserve(observer);
     };
   }, [yDoc, isDraggingLocal]);
 
-  return columns;
+  return { columns, columnOrder, columnMetadata };
 }

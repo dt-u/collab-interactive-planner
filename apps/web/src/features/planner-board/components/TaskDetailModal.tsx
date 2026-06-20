@@ -3,8 +3,13 @@ import * as Y from "yjs";
 import { useParams } from "react-router-dom";
 import { useYjsDocument } from "../../collaborative-editor/hooks/useYjsDocument.js";
 import { httpClient } from "../../../shared/api/http-client.js";
-import { X, Send, Paperclip, MessageSquare, Trash2, Calendar, FileText } from "lucide-react";
+import { X, Send, Paperclip, MessageSquare, Trash2, FileText, Clock, DollarSign, Image } from "lucide-react";
 import { Spinner } from "../../../shared/ui/spinner/Spinner.js";
+import {
+  getSharedColumns,
+  getSharedColumnOrder,
+  getSharedColumnMetadata,
+} from "@collab-planner/yjs-utils";
 
 interface TaskDetailModalProps {
   isOpen: boolean;
@@ -33,7 +38,7 @@ interface MediaDto {
   fileSize: number;
   mimeType: string;
   uploaderId: string;
-  createdAt: Date; // wait, let's keep it as is
+  createdAt: Date;
 }
 
 export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
@@ -48,6 +53,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   // Local state to avoid input lag
   const [localTitle, setLocalTitle] = useState("");
   const [localDesc, setLocalDesc] = useState("");
+  const [localTime, setLocalTime] = useState("");
+  const [localCost, setLocalCost] = useState("");
+  const [localImage, setLocalImage] = useState("");
   
   // Comments and Media states
   const [comments, setComments] = useState<CommentDto[]>([]);
@@ -64,6 +72,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     if (task) {
       setLocalTitle(task.title);
       setLocalDesc(task.description);
+      setLocalTime(task.time || "");
+      setLocalCost(task.cost || "");
+      setLocalImage(task.image || "");
     }
   }, [task]);
 
@@ -110,9 +121,46 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     }
   };
 
+  const handleTimeBlur = () => {
+    if (task && localTime !== (task.time || "")) {
+      updateTask({ time: localTime });
+    }
+  };
+
+  const handleCostBlur = () => {
+    if (task && localCost !== (task.cost || "")) {
+      updateTask({ cost: localCost });
+    }
+  };
+
+  const handleImageBlur = () => {
+    if (task && localImage !== (task.image || "")) {
+      updateTask({ image: localImage });
+    }
+  };
+
   const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const status = e.target.value as "todo" | "in_progress" | "done";
-    updateTask({ status });
+    const newColId = e.target.value;
+    if (!yDoc || !task) return;
+
+    const sourceCol = task.status;
+    const destCol = newColId;
+    if (sourceCol === destCol) return;
+
+    const columnsMap = getSharedColumns(yDoc);
+    const sourceArray = columnsMap.get(sourceCol);
+    const destArray = columnsMap.get(destCol);
+
+    if (!sourceArray || !destArray) return;
+
+    yDoc.transact(() => {
+      const sourceIndex = sourceArray.toArray().indexOf(taskId);
+      if (sourceIndex !== -1) {
+        sourceArray.delete(sourceIndex);
+      }
+      destArray.push([taskId]);
+      updateTask({ status: destCol });
+    });
   };
 
   const handleAddComment = async (e: React.FormEvent) => {
@@ -167,11 +215,15 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
   if (!isOpen || !task) return null;
 
+  // Retrieve days metadata list dynamically from Yjs for status dropdown
+  const orderArray = yDoc ? getSharedColumnOrder(yDoc).toArray() : [];
+  const metadataMap = yDoc ? getSharedColumnMetadata(yDoc) : null;
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
         className="modal-card"
-        style={{ maxWidth: 840, width: "90%", padding: 24 }}
+        style={{ maxWidth: 880, width: "95%", padding: 24 }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
@@ -188,7 +240,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <FileText size={20} className="workspace-icon" />
             <span style={{ fontSize: 13, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)" }}>
-              Task Editor
+              Itinerary Item Editor
             </span>
           </div>
           <button
@@ -209,25 +261,69 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
           {/* Main Column */}
           <div className="detail-main-col">
             <div className="form-group">
-              <label>Task Title</label>
+              <label>Itinerary Activity Title</label>
               <input
                 type="text"
                 value={localTitle}
                 onChange={(e) => setLocalTitle(e.target.value)}
                 onBlur={handleTitleBlur}
-                placeholder="Enter task title..."
+                placeholder="e.g. CAFE HOPPING, BBQ NIGHT..."
                 style={{ fontSize: 16, fontWeight: 600 }}
               />
             </div>
 
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div className="form-group">
+                <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <Clock size={12} />
+                  <span>Time of Day</span>
+                </label>
+                <input
+                  type="text"
+                  value={localTime}
+                  onChange={(e) => setLocalTime(e.target.value)}
+                  onBlur={handleTimeBlur}
+                  placeholder="e.g. 10:00 AM, 6:00 PM..."
+                />
+              </div>
+
+              <div className="form-group">
+                <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <DollarSign size={12} />
+                  <span>Estimated Cost</span>
+                </label>
+                <input
+                  type="text"
+                  value={localCost}
+                  onChange={(e) => setLocalCost(e.target.value)}
+                  onBlur={handleCostBlur}
+                  placeholder="e.g. 300k VND, Free..."
+                />
+              </div>
+            </div>
+
             <div className="form-group">
-              <label>Description</label>
+              <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <Image size={12} />
+                <span>Card Cover Image URL</span>
+              </label>
+              <input
+                type="text"
+                value={localImage}
+                onChange={(e) => setLocalImage(e.target.value)}
+                onBlur={handleImageBlur}
+                placeholder="e.g. https://images.unsplash.com/... or paste image address"
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Description & Notes</label>
               <textarea
                 value={localDesc}
                 onChange={(e) => setLocalDesc(e.target.value)}
                 onBlur={handleDescBlur}
                 placeholder="Add collaborative description details here..."
-                rows={6}
+                rows={5}
               />
             </div>
 
@@ -281,14 +377,14 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                 <div className="media-upload-fields">
                   <input
                     type="text"
-                    placeholder="File Name (e.g. wireframe.png)"
+                    placeholder="File Name (e.g. map.png)"
                     value={mockFileName}
                     onChange={(e) => setMockFileName(e.target.value)}
                     required
                   />
                   <input
                     type="text"
-                    placeholder="File URL (e.g. http://example.com/file)"
+                    placeholder="File URL"
                     value={mockFileUrl}
                     onChange={(e) => setMockFileUrl(e.target.value)}
                     required
@@ -304,11 +400,16 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
           {/* Sidebar Column */}
           <div className="detail-side-col">
             <div className="form-group">
-              <label>Status</label>
+              <label>Day / Timeline Milestone</label>
               <select value={task.status} onChange={handleStatusChange}>
-                <option value="todo">To Do</option>
-                <option value="in_progress">In Progress</option>
-                <option value="done">Done</option>
+                {orderArray.map((colId) => {
+                  const meta = metadataMap?.get(colId) as any;
+                  return (
+                    <option key={colId} value={colId}>
+                      {meta?.title || `DAY ${colId.toUpperCase()}`}
+                    </option>
+                  );
+                })}
               </select>
             </div>
 
