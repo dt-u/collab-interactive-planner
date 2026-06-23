@@ -1,7 +1,7 @@
 import { WorkspaceRepository } from "./workspace.repository.js";
 import { UserRepository } from "../users/user.repository.js";
 import { WorkspaceMapper } from "./workspace.mapper.js";
-import { WorkspaceDto, MemberRole } from "@collab-planner/shared";
+import { WorkspaceDto, MemberRole, UpdateWorkspaceRequest } from "@collab-planner/shared";
 import { AppError } from "../../middleware/error.middleware.js";
 
 export class WorkspaceService {
@@ -50,6 +50,35 @@ export class WorkspaceService {
     }
 
     return WorkspaceMapper.toDto(workspace);
+  }
+
+  async updateWorkspace(
+    workspaceId: string,
+    userId: string,
+    data: UpdateWorkspaceRequest,
+  ): Promise<WorkspaceDto> {
+    const workspace = await this.workspaceRepository.findById(workspaceId);
+    if (!workspace) {
+      throw new AppError("Workspace not found", 404, "WORKSPACE_NOT_FOUND");
+    }
+
+    const member = workspace.members.find(
+      (m) => m.userId._id.toString() === userId,
+    );
+    if (!member || (member.role !== "owner" && member.role !== "admin")) {
+      throw new AppError(
+        "Access denied. Only owners or admins can update this workspace.",
+        403,
+        "FORBIDDEN",
+      );
+    }
+
+    const updated = await this.workspaceRepository.update(workspaceId, data);
+    if (!updated) {
+      throw new AppError("Failed to update workspace", 500);
+    }
+
+    return WorkspaceMapper.toDto(updated);
   }
 
   async inviteMember(

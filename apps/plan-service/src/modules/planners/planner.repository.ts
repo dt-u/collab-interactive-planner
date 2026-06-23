@@ -18,6 +18,18 @@ export class PlannerRepository {
     return plan.save({ session });
   }
 
+  async update(
+    id: string,
+    planData: Partial<Pick<IPlan, "name" | "description">>,
+    session?: mongoose.ClientSession,
+  ): Promise<IPlan | null> {
+    return PlanModel.findByIdAndUpdate(id, planData, {
+      new: true,
+      runValidators: true,
+      session,
+    }).exec();
+  }
+
   async delete(
     id: string,
     session?: mongoose.ClientSession,

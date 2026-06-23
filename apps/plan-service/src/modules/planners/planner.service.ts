@@ -1,7 +1,7 @@
 import { PlannerRepository } from "./planner.repository.js";
 import { WorkspaceRepository } from "../workspaces/workspace.repository.js";
 import { PlannerMapper } from "./planner.mapper.js";
-import { PlanDto, CreatePlanRequest } from "@collab-planner/shared";
+import { PlanDto, CreatePlanRequest, UpdatePlanRequest } from "@collab-planner/shared";
 import { AppError } from "../../middleware/error.middleware.js";
 
 export class PlannerService {
@@ -90,6 +90,46 @@ export class PlannerService {
 
     const plans = await this.plannerRepository.findByWorkspace(workspaceId);
     return plans.map((p) => PlannerMapper.toDto(p));
+  }
+
+  async updatePlan(
+    planId: string,
+    userId: string,
+    data: UpdatePlanRequest,
+  ): Promise<PlanDto> {
+    const plan = await this.plannerRepository.findById(planId);
+    if (!plan) {
+      throw new AppError("Plan not found", 404, "PLAN_NOT_FOUND");
+    }
+
+    const workspace = await this.workspaceRepository.findById(
+      plan.workspaceId.toString(),
+    );
+    if (!workspace) {
+      throw new AppError("Workspace not found", 404, "WORKSPACE_NOT_FOUND");
+    }
+
+    const member = workspace.members.find(
+      (m) => m.userId._id.toString() === userId,
+    );
+    const isCreator = plan.creatorId.toString() === userId;
+    const isPrivileged =
+      member && (member.role === "owner" || member.role === "admin");
+
+    if (!isCreator && !isPrivileged) {
+      throw new AppError(
+        "Access denied. You do not have permission to update this plan.",
+        403,
+        "FORBIDDEN",
+      );
+    }
+
+    const updated = await this.plannerRepository.update(planId, data);
+    if (!updated) {
+      throw new AppError("Failed to update plan", 500, "PLAN_UPDATE_FAILED");
+    }
+
+    return PlannerMapper.toDto(updated);
   }
 
   async deletePlan(planId: string, userId: string): Promise<void> {

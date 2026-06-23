@@ -5,6 +5,7 @@ import { validateBody } from "../../middleware/validate.middleware.js";
 import {
   createWorkspaceRequestSchema,
   inviteMemberRequestSchema,
+  updateWorkspaceRequestSchema,
 } from "@collab-planner/shared";
 
 const router = Router();
@@ -15,6 +16,7 @@ router.use(authMiddleware);
 router.post("/", validateBody(createWorkspaceRequestSchema), controller.create);
 router.get("/", controller.list);
 router.get("/:id", controller.get);
+router.patch("/:id", validateBody(updateWorkspaceRequestSchema), controller.update);
 router.post(
   "/:id/invite",
   validateBody(inviteMemberRequestSchema),

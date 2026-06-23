@@ -89,6 +89,32 @@ export class PlannerController {
     }
   };
 
+  updatePlan = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const userId = req.user?.userId;
+      if (!userId) {
+        res
+          .status(401)
+          .json({ success: false, error: { message: "Unauthorized" } });
+        return;
+      }
+
+      const plan = await this.plannerService.updatePlan(id, userId, req.body);
+
+      res.status(200).json({
+        success: true,
+        data: plan,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   deletePlan = async (
     req: Request,
     res: Response,

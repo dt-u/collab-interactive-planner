@@ -20,6 +20,20 @@ export class WorkspaceRepository {
     return workspace.save({ session });
   }
 
+  async update(
+    workspaceId: string,
+    workspaceData: Partial<Pick<IWorkspace, "name">>,
+    session?: mongoose.ClientSession,
+  ): Promise<IWorkspace | null> {
+    return WorkspaceModel.findByIdAndUpdate(workspaceId, workspaceData, {
+      new: true,
+      runValidators: true,
+      session,
+    })
+      .populate("members.userId")
+      .exec();
+  }
+
   async addMember(
     workspaceId: string,
     userId: string,

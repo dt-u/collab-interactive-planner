@@ -2,7 +2,7 @@ import { Router } from "express";
 import { PlannerController } from "./planner.controller.js";
 import { authMiddleware } from "../../middleware/auth.middleware.js";
 import { validateBody } from "../../middleware/validate.middleware.js";
-import { createPlanRequestSchema } from "@collab-planner/shared";
+import { createPlanRequestSchema, updatePlanRequestSchema } from "@collab-planner/shared";
 
 const router = Router();
 const controller = new PlannerController();
@@ -22,6 +22,12 @@ router.get(
 
 // Individual plan endpoints
 router.get("/plans/:id", authMiddleware, controller.getPlanDetails);
+router.patch(
+  "/plans/:id",
+  authMiddleware,
+  validateBody(updatePlanRequestSchema),
+  controller.updatePlan,
+);
 router.delete("/plans/:id", authMiddleware, controller.deletePlan);
 
 export default router;

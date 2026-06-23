@@ -74,6 +74,32 @@ export class WorkspaceController {
     }
   };
 
+  update = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const workspaceId = req.params.id;
+      const userId = req.user?.userId;
+      if (!userId) {
+        res
+          .status(401)
+          .json({ success: false, error: { message: "Unauthorized" } });
+        return;
+      }
+
+      const workspace = await this.workspaceService.updateWorkspace(
+        workspaceId,
+        userId,
+        req.body,
+      );
+      res.status(200).json({ success: true, data: workspace });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   invite = async (
     req: Request,
     res: Response,

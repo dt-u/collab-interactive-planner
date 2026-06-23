@@ -33,6 +33,48 @@ export async function hydrateDocument(docId: string, doc: Y.Doc): Promise<void> 
     applyUpdateToDoc(doc, delta.update, "db-delta");
   }
 
+  // If the document has no snapshot and no deltas, it is completely new.
+  // Initialize with exactly 3 default days and 1 default task card as requested by the user.
+  if (!snapshot && deltas.length === 0) {
+    console.log(`🌱 Initializing default workspace days and item for new Y.Doc: ${docId}`);
+    doc.transact(() => {
+      const orderArray = doc.getArray("columnOrder");
+      const metadataMap = doc.getMap("columnMetadata");
+      const columnsMap = doc.getMap("columns");
+      const itemsMap = doc.getMap("items");
+
+      orderArray.push(["day_1", "day_2", "day_3"]);
+
+      metadataMap.set("day_1", { id: "day_1", title: "DAY 1: EXPLORE" });
+      metadataMap.set("day_2", { id: "day_2", title: "DAY 2: RELAX & EAT" });
+      metadataMap.set("day_3", { id: "day_3", title: "DAY 3: NATURE" });
+
+      columnsMap.set("day_1", new Y.Array<string>());
+      columnsMap.set("day_2", new Y.Array<string>());
+      columnsMap.set("day_3", new Y.Array<string>());
+
+      // Add exactly 1 default activity item as requested
+      const defaultTaskId = "task_init_" + Math.random().toString(36).substring(2, 6);
+      const taskMap = new Y.Map();
+      taskMap.set("id", defaultTaskId);
+      taskMap.set("title", "Plan Dalat Itinerary!");
+      taskMap.set("description", "Start planning activities for Day 1.");
+      taskMap.set("status", "day_1");
+      taskMap.set("time", "09:00 AM");
+      taskMap.set("cost", "Free");
+      taskMap.set("image", "");
+
+      itemsMap.set(defaultTaskId, taskMap);
+
+      const day1Array = columnsMap.get("day_1") as Y.Array<string>;
+      day1Array.push([defaultTaskId]);
+    });
+
+    // Save this initial state to MongoDB
+    const stateUpdate = Y.encodeStateAsUpdate(doc);
+    await YjsPersistenceRepository.appendUpdate(docId, Buffer.from(stateUpdate));
+  }
+
   console.log(`💧 Hydrated Y.Doc ${docId}: Snapshot version ${snapshot?.version || 0}, applied ${deltas.length} delta updates.`);
 }
 
