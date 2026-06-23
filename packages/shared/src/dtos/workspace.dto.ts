@@ -19,6 +19,14 @@ export type CreateWorkspaceRequest = z.infer<
   typeof createWorkspaceRequestSchema
 >;
 
+export const updateWorkspaceRequestSchema = createWorkspaceRequestSchema.partial().refine(
+  (value) => value.name !== undefined,
+  "Workspace name is required",
+);
+export type UpdateWorkspaceRequest = z.infer<
+  typeof updateWorkspaceRequestSchema
+>;
+
 export const inviteMemberRequestSchema = z.object({
   email: z.string().email(),
   role: memberRoleSchema.default("member"),

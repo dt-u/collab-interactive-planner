@@ -7,6 +7,12 @@ export const createPlanRequestSchema = z.object({
 });
 export type CreatePlanRequest = z.infer<typeof createPlanRequestSchema>;
 
+export const updatePlanRequestSchema = createPlanRequestSchema.partial().refine(
+  (value) => value.name !== undefined || value.description !== undefined,
+  "At least one plan field is required",
+);
+export type UpdatePlanRequest = z.infer<typeof updatePlanRequestSchema>;
+
 export const planDtoSchema = z.object({
   id: z.string(),
   name: z.string(),
