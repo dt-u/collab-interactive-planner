@@ -71,6 +71,14 @@ body {
   display: flex;
   flex-direction: column;
   height: 100%;
+  transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1), padding 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-right-color 0.3s ease;
+}
+
+.app-sidebar.collapsed {
+  width: 0px !important;
+  min-width: 0px !important;
+  border-right: none !important;
+  overflow: hidden;
 }
 
 .sidebar-brand {
@@ -789,28 +797,35 @@ body {
 .board-canvas-area {
   flex: 1;
   overflow-x: auto;
-  overflow-y: hidden;
-  padding: 24px 32px;
+  overflow-y: auto; /* allow vertical scrolling on whiteboard */
+  padding: 32px;
   position: relative; /* important for relative coordinates mouse tracking */
+  background-color: #070709;
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+  background-size: 30px 30px;
 }
 
 .board-columns-list {
   display: flex;
-  gap: 24px;
+  gap: 32px;
   height: 100%;
   align-items: flex-start;
 }
 
 .kanban-column {
-  width: 320px;
-  background-color: rgba(15, 15, 20, 0.4);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
+  width: 480px;
+  background-color: rgba(15, 15, 20, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 16px;
   display: flex;
   flex-direction: column;
+  height: max-content;
   max-height: 100%;
-  overflow: hidden;
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--glass-shadow);
+  transition: all 0.3s ease;
 }
 
 .column-header {
@@ -862,11 +877,12 @@ body {
 .cards-container {
   padding: 16px;
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-  overflow-y: auto;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-content: flex-start;
   flex: 1;
-  min-height: 150px;
+  min-height: 250px;
 }
 
 /* Kanban Cards styling */
@@ -880,6 +896,11 @@ body {
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   user-select: none;
   overflow: hidden;
+  width: 215px; /* Two cards fit side-by-side in 480px column */
+  min-height: 230px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
 
 .task-card:hover {
@@ -1401,3 +1422,590 @@ body {
   0%, 100% { opacity: 0.6; transform: scale(1); }
   50% { opacity: 1; transform: scale(1.2); }
 }
+
+/* Custom Micro-Animations */
+@keyframes wiggle {
+  0%, 100% { transform: rotate(-3deg) scale(1); }
+  50% { transform: rotate(3deg) scale(1.05); }
+}
+.hover-wiggle:hover {
+  animation: wiggle 0.4s ease-in-out infinite;
+}
+
+@keyframes slow-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.spin-gently {
+  animation: slow-spin 8s linear infinite;
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.8); opacity: 0.5; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+.animate-pulse-ring::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background-color: inherit;
+  animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+  z-index: -1;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px) rotate(-3deg); }
+  50% { transform: translateY(-5px) rotate(-2deg); }
+}
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* Whiteboard Themes & Classes */
+.board-canvas-area.whiteboard {
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: auto;
+  padding: 32px;
+  position: relative;
+  background: linear-gradient(135deg, #f8fafc, #f1f5f9) !important;
+  background-image: 
+    linear-gradient(rgba(15, 23, 42, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.03) 1px, transparent 1px) !important;
+  background-size: 24px 24px !important;
+}
+
+.kanban-header.whiteboard {
+  padding: 16px 32px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.8) !important;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: rgba(255, 255, 255, 0.85) !important;
+  backdrop-filter: blur(12px) !important;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.kanban-header.whiteboard .board-info-section h2 {
+  color: #0f172a !important;
+  font-family: var(--font-sans);
+  font-weight: 800;
+  background: none !important;
+  -webkit-background-clip: unset !important;
+  -webkit-text-fill-color: unset !important;
+}
+
+.kanban-header.whiteboard .board-info-section p {
+  color: #64748b !important;
+}
+
+.kanban-header.whiteboard .icon-action-btn {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  box-shadow: none !important;
+}
+
+.kanban-header.whiteboard .icon-action-btn:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+/* Floating Deck Columns */
+.kanban-column-whiteboard {
+  width: 320px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition: all 0.3s ease;
+}
+
+.column-header-card {
+  background-color: #ffffff;
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.column-header-card h3 {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e293b;
+  letter-spacing: -0.2px;
+}
+
+.cards-container-whiteboard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 200px;
+  width: 100%;
+}
+
+/* Floating Task Cards */
+.whiteboard-task-card {
+  background-color: #ffffff;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: grab;
+  position: relative;
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.whiteboard-task-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 24px -10px rgba(15, 23, 42, 0.15);
+  border-color: rgba(203, 213, 225, 0.9);
+}
+
+.whiteboard-task-card:active {
+  cursor: grabbing;
+}
+
+.whiteboard-task-card-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e293b;
+  line-height: 1.4;
+}
+
+.whiteboard-task-card-desc {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.whiteboard-task-card-thumbnail {
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.whiteboard-task-card-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.whiteboard-task-card-cover {
+  width: 100%;
+  height: 100px;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.whiteboard-task-card-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Day Badge & Time badge colors */
+.day-badge {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 16px;
+}
+
+.day-badge.teal {
+  background-color: #e6fffa;
+  color: #0d9488;
+}
+
+.day-badge.purple {
+  background-color: #f3e8ff;
+  color: #9333ea;
+}
+
+.day-badge.rose {
+  background-color: #ffe4e6;
+  color: #e11d48;
+}
+
+.time-badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.time-badge-pill.teal {
+  background-color: #ccfbf1;
+  color: #115e59;
+}
+
+.time-badge-pill.purple {
+  background-color: #f3e8ff;
+  color: #6b21a8;
+}
+
+.time-badge-pill.rose {
+  background-color: #ffe4e6;
+  color: #9f1239;
+}
+
+.cost-tag-whiteboard {
+  background-color: #f0fdf4;
+  color: #16a34a;
+  border: 1px solid #dcfce7;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.add-plan-dashed-btn {
+  width: 100%;
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #94a3b8;
+  background-color: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.add-plan-dashed-btn:hover {
+  background-color: #ffffff;
+  border-color: #94a3b8;
+  color: #64748b;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+
+.column-title-input-whiteboard {
+  font-size: 14px;
+  font-weight: 700;
+  background-color: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #1e293b;
+  padding: 4px 8px;
+  width: 90%;
+  outline: none;
+}
+
+.column-title-input-whiteboard:focus {
+  border-color: #3b82f6;
+}
+
+/* Whiteboard location pill */
+.location-pill-whiteboard {
+  padding: 4px 8px;
+  border-radius: 6px;
+  background-color: #ccfbf1;
+  color: #0f766e;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid #99f6e4;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Online Presence Status Light style */
+.online-status-whiteboard {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 9999px;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #15803d;
+}
+
+/* Dark co-op planner surface */
+.board-canvas-area.whiteboard {
+  background:
+    radial-gradient(circle at 14% 16%, rgba(45, 212, 191, 0.14), transparent 26%),
+    radial-gradient(circle at 86% 10%, rgba(236, 72, 153, 0.12), transparent 28%),
+    linear-gradient(135deg, #070709 0%, #101016 48%, #071114 100%) !important;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px) !important;
+  background-size: 28px 28px !important;
+  padding: 34px;
+  overscroll-behavior: contain;
+}
+
+.board-canvas-area.whiteboard::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(45, 212, 191, 0.08), transparent 24%, transparent 76%, rgba(236, 72, 153, 0.08)),
+    radial-gradient(circle at center, transparent 44%, rgba(0, 0, 0, 0.32));
+}
+
+.kanban-header.whiteboard {
+  padding: 14px 28px;
+  background: rgba(9, 9, 13, 0.84) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.28);
+}
+
+.kanban-header.whiteboard .board-info-section h2 {
+  color: #f8fafc !important;
+  letter-spacing: 0;
+}
+
+.kanban-header.whiteboard .board-info-section p {
+  color: rgba(226, 232, 240, 0.62) !important;
+}
+
+.kanban-header.whiteboard .icon-action-btn,
+.online-status-whiteboard,
+.location-pill-whiteboard {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #dbeafe;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.kanban-header.whiteboard .icon-action-btn:hover {
+  background: rgba(45, 212, 191, 0.1);
+  border-color: rgba(45, 212, 191, 0.32);
+  color: #f8fafc;
+  transform: translateY(-1px);
+}
+
+.online-status-whiteboard {
+  color: #86efac;
+}
+
+.location-pill-whiteboard {
+  color: #5eead4;
+}
+
+.board-columns-list {
+  gap: 26px;
+  padding-bottom: 40px;
+  position: relative;
+  z-index: 1;
+}
+
+.kanban-column-whiteboard {
+  width: 316px;
+  gap: 14px;
+}
+
+.column-header-card {
+  background: rgba(12, 13, 18, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(18px);
+}
+
+.column-header-card h3 {
+  color: #f8fafc;
+  letter-spacing: 0;
+}
+
+.column-header-card p {
+  color: rgba(226, 232, 240, 0.56) !important;
+}
+
+.day-badge {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  color: #071014;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.28);
+}
+
+.day-badge.teal {
+  background: linear-gradient(135deg, #5eead4, #22d3ee);
+  color: #042f2e;
+}
+
+.day-badge.purple {
+  background: linear-gradient(135deg, #c084fc, #f0abfc);
+  color: #3b0764;
+}
+
+.day-badge.rose {
+  background: linear-gradient(135deg, #fb7185, #facc15);
+  color: #3f0b16;
+}
+
+.cards-container-whiteboard {
+  gap: 12px;
+  min-height: 230px;
+  padding: 2px;
+}
+
+.whiteboard-task-card {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.035)),
+    rgba(12, 13, 18, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #f8fafc;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.26);
+  cursor: grab;
+  touch-action: none;
+  will-change: transform;
+}
+
+.whiteboard-task-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  border-radius: 8px 0 0 8px;
+  background: linear-gradient(180deg, #5eead4, #c084fc, #fb7185);
+  opacity: 0.86;
+}
+
+.whiteboard-task-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(94, 234, 212, 0.32);
+  box-shadow: 0 24px 54px rgba(0, 0, 0, 0.32), 0 0 28px rgba(45, 212, 191, 0.08);
+}
+
+.whiteboard-task-card:active {
+  cursor: grabbing;
+}
+
+.whiteboard-task-card-title {
+  color: #f8fafc;
+  letter-spacing: 0;
+}
+
+.whiteboard-task-card-desc {
+  color: rgba(226, 232, 240, 0.68);
+}
+
+.whiteboard-task-card .whiteboard-task-card-desc[style] {
+  background-color: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: rgba(226, 232, 240, 0.76) !important;
+}
+
+.whiteboard-task-card > div:last-child {
+  border-top-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.time-badge-pill {
+  border-radius: 8px;
+  letter-spacing: 0;
+}
+
+.time-badge-pill.teal {
+  background: rgba(45, 212, 191, 0.14);
+  border: 1px solid rgba(45, 212, 191, 0.24);
+  color: #99f6e4;
+}
+
+.time-badge-pill.purple {
+  background: rgba(192, 132, 252, 0.14);
+  border: 1px solid rgba(192, 132, 252, 0.26);
+  color: #e9d5ff;
+}
+
+.time-badge-pill.rose {
+  background: rgba(251, 113, 133, 0.14);
+  border: 1px solid rgba(251, 113, 133, 0.26);
+  color: #fecdd3;
+}
+
+.cost-tag-whiteboard {
+  background: rgba(250, 204, 21, 0.12);
+  border: 1px solid rgba(250, 204, 21, 0.22);
+  border-radius: 8px;
+  color: #fde68a;
+}
+
+.add-plan-dashed-btn {
+  min-height: 48px;
+  border-color: rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  color: rgba(226, 232, 240, 0.62);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.add-plan-dashed-btn:hover {
+  background: rgba(45, 212, 191, 0.08);
+  border-color: rgba(45, 212, 191, 0.38);
+  color: #ccfbf1;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.22);
+}
+
+.column-title-input-whiteboard {
+  background-color: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  color: #f8fafc;
+}
+
+.drag-overlay-card {
+  cursor: grabbing;
+  opacity: 0.98;
+  transform: rotate(-2deg);
+  transform-origin: center;
+  filter: drop-shadow(0 26px 42px rgba(0, 0, 0, 0.36));
+}
+
+.drag-overlay-card .whiteboard-task-card {
+  border-color: rgba(94, 234, 212, 0.52);
+  box-shadow: 0 0 0 1px rgba(94, 234, 212, 0.18), 0 28px 70px rgba(0, 0, 0, 0.42);
+}
+
+@media (max-width: 760px) {
+  .kanban-header.whiteboard {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px 18px;
+  }
+
+  .board-collaborators {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .board-canvas-area.whiteboard {
+    padding: 20px;
+  }
+
+  .kanban-column-whiteboard {
+    width: min(300px, calc(100vw - 48px));
+  }
+}
+

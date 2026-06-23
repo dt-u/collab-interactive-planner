@@ -3,7 +3,7 @@ import { Outlet, Link, useNavigate, useParams, useLocation } from "react-router-
 import { useAuth } from "../providers/AuthProvider.js";
 import { httpClient } from "../../shared/api/http-client.js";
 import { WorkspaceDto } from "@collab-planner/shared";
-import { LayoutDashboard, Plus, LogOut, Folder, FileText, Bell, User } from "lucide-react";
+import { LayoutDashboard, Plus, LogOut, Folder, FileText, Bell, User, Menu, ArrowLeft } from "lucide-react";
 import { Spinner } from "../../shared/ui/spinner/Spinner.js";
 
 export const DashboardLayout: React.FC = () => {
@@ -15,6 +15,20 @@ export const DashboardLayout: React.FC = () => {
   const [showNewWorkspaceModal, setShowNewWorkspaceModal] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState("");
   const [createLoading, setCreateLoading] = useState(false);
+  const { planId } = useParams<{ planId?: string }>();
+
+  // Collapsible sidebar state (persisted in localStorage)
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    return localStorage.getItem("sidebar_collapsed") === "true";
+  });
+
+  const toggleSidebar = () => {
+    setIsSidebarCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem("sidebar_collapsed", String(next));
+      return next;
+    });
+  };
 
   // Load workspaces of current user
   const fetchWorkspaces = async () => {
@@ -52,10 +66,30 @@ export const DashboardLayout: React.FC = () => {
   return (
     <div className="app-layout">
       {/* 1. Sidebar Navigation */}
-      <aside className="app-sidebar">
-        <div className="sidebar-brand">
-          <span className="brand-icon">ICP</span>
-          <span className="brand-name">Interactive Planner</span>
+      <aside className={`app-sidebar ${isSidebarCollapsed ? "collapsed" : ""}`}>
+        <div className="sidebar-brand" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, overflow: "hidden" }}>
+            <span className="brand-icon">ICP</span>
+            <span className="brand-name" style={{ whiteSpace: "nowrap" }}>Interactive Planner</span>
+          </div>
+          <button 
+            onClick={toggleSidebar}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "var(--text-muted)",
+              cursor: "pointer",
+              padding: 4,
+              borderRadius: 6,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+            className="sidebar-collapse-btn"
+            title="Collapse Sidebar"
+          >
+            <ArrowLeft size={16} />
+          </button>
         </div>
 
         <nav className="sidebar-nav">
@@ -119,21 +153,42 @@ export const DashboardLayout: React.FC = () => {
 
       {/* 2. Main Work Area */}
       <div className="app-content-wrapper">
-        <header className="app-header">
-          <div className="header-breadcrumbs">
-            <span className="breadcrumb-current">Dashboard</span>
-          </div>
+        {!planId && (
+          <header className="app-header">
+            <div className="header-breadcrumbs" style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              {isSidebarCollapsed && (
+                <button 
+                  onClick={toggleSidebar}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--text-muted)",
+                    cursor: "pointer",
+                    padding: 4,
+                    borderRadius: 6,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                  title="Expand Sidebar"
+                >
+                  <Menu size={18} />
+                </button>
+              )}
+              <span className="breadcrumb-current">Dashboard</span>
+            </div>
 
-          <div className="header-actions">
-            <button className="header-icon-btn" title="Notifications">
-              <Bell size={20} />
-              <span className="notification-badge"></span>
-            </button>
-          </div>
-        </header>
+            <div className="header-actions">
+              <button className="header-icon-btn" title="Notifications">
+                <Bell size={20} />
+                <span className="notification-badge"></span>
+              </button>
+            </div>
+          </header>
+        )}
 
-        <main className="app-main">
-          <Outlet />
+        <main className="app-main" style={planId ? { height: "100%", padding: 0 } : undefined}>
+          <Outlet context={{ isSidebarCollapsed, toggleSidebar }} />
         </main>
       </div>
 

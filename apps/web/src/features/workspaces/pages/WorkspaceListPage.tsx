@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { httpClient } from "../../../shared/api/http-client.js";
 import { WorkspaceDto, PlanDto } from "@collab-planner/shared";
-import { Folder, Plus, FileText, ChevronRight, UserPlus, Trash2 } from "lucide-react";
+import { Folder, Plus, FileText, ChevronRight, UserPlus, Trash2, Edit2 } from "lucide-react";
 import { Spinner } from "../../../shared/ui/spinner/Spinner.js";
 
 interface WorkspaceWithPlans extends WorkspaceDto {
@@ -27,6 +27,12 @@ export const WorkspaceListPage: React.FC = () => {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"admin" | "member">("member");
   const [inviteLoading, setInviteLoading] = useState(false);
+
+  // Edit workspace states
+  const [showEditWorkspaceModal, setShowEditWorkspaceModal] = useState(false);
+  const [editingWorkspaceId, setEditingWorkspaceId] = useState<string | null>(null);
+  const [editingWorkspaceName, setEditingWorkspaceName] = useState("");
+  const [editLoading, setEditLoading] = useState(false);
 
   const fetchWorkspacesAndPlans = async () => {
     try {
@@ -119,6 +125,30 @@ export const WorkspaceListPage: React.FC = () => {
     }
   };
 
+  const handleUpdateWorkspace = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingWorkspaceId || !editingWorkspaceName.trim()) return;
+
+    try {
+      setEditLoading(true);
+      await httpClient.patch(`/workspaces/${editingWorkspaceId}`, {
+        name: editingWorkspaceName,
+      });
+      
+      setEditingWorkspaceId(null);
+      setEditingWorkspaceName("");
+      setShowEditWorkspaceModal(false);
+      
+      // Reload workspaces
+      await fetchWorkspacesAndPlans();
+    } catch (err: any) {
+      console.error("❌ Failed to update workspace:", err);
+      alert(`❌ Failed to update workspace: ${err.response?.data?.error?.message || err.message}`);
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchWorkspacesAndPlans();
   }, []);
@@ -149,7 +179,19 @@ export const WorkspaceListPage: React.FC = () => {
                 <span className="members-badge">{ws.members.length} members</span>
               </div>
               
-              <div className="workspace-actions">
+              <div className="workspace-actions" style={{ display: "flex", gap: 8 }}>
+                <button
+                  className="icon-action-btn"
+                  title="Edit Workspace"
+                  onClick={() => {
+                    setEditingWorkspaceId(ws.id);
+                    setEditingWorkspaceName(ws.name);
+                    setShowEditWorkspaceModal(true);
+                  }}
+                >
+                  <Edit2 size={16} />
+                  <span>Edit</span>
+                </button>
                 <button
                   className="icon-action-btn"
                   title="Invite Member"
@@ -295,6 +337,45 @@ export const WorkspaceListPage: React.FC = () => {
                   disabled={inviteLoading || !inviteEmail.trim()}
                 >
                   {inviteLoading ? "Inviting..." : "Send Invitation"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Edit Workspace Modal */}
+      {showEditWorkspaceModal && (
+        <div className="modal-backdrop">
+          <div className="modal-card">
+            <h2>Edit Workspace</h2>
+            <form onSubmit={handleUpdateWorkspace}>
+              <div className="form-group">
+                <label>Workspace Name</label>
+                <input
+                  type="text"
+                  placeholder="Enter workspace name"
+                  value={editingWorkspaceName}
+                  onChange={(e) => setEditingWorkspaceName(e.target.value)}
+                  required
+                  autoFocus
+                />
+              </div>
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="modal-btn btn-secondary"
+                  onClick={() => setShowEditWorkspaceModal(false)}
+                  disabled={editLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="modal-btn btn-primary"
+                  disabled={editLoading || !editingWorkspaceName.trim()}
+                >
+                  {editLoading ? "Saving..." : "Save"}
                 </button>
               </div>
             </form>

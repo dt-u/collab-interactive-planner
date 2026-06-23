@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useOutletContext } from "react-router-dom";
 import * as Y from "yjs";
 import {
   DndContext,
@@ -8,6 +8,8 @@ import {
   PointerSensor,
   DragStartEvent,
   DragEndEvent,
+  useDroppable,
+  DragOverlay,
 } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { useAuth } from "../../../app/providers/AuthProvider.js";
@@ -24,8 +26,35 @@ import {
 import { httpClient } from "../../../shared/api/http-client.js";
 import { BoardTaskCard } from "./BoardTaskCard.js";
 import { TaskDetailModal } from "./TaskDetailModal.js";
-import { Plus, ArrowLeft, Trash2, X, Copy } from "lucide-react";
+import { Plus, ArrowLeft, Trash2, X, Copy, MapPin, Menu, Settings, Edit2 } from "lucide-react";
 import { Spinner } from "../../../shared/ui/spinner/Spinner.js";
+
+interface ColumnCardsContainerProps {
+  colId: string;
+  children: React.ReactNode;
+}
+
+const DEFAULT_DAY_COLUMNS = [
+  { id: "day_1", title: "DAY 1: ARRIVE & EXPLORE" },
+  { id: "day_2", title: "DAY 2: FOOD & FRIENDS" },
+  { id: "day_3", title: "DAY 3: NATURE RUN" },
+] as const;
+
+const DEFAULT_TASK_ID = "task_default_dalat_kickoff";
+
+const isDefaultDayColumn = (colId: string, title = ""): boolean => {
+  return /^day_\d+/.test(colId) || /^DAY\s+\d+/i.test(title.trim());
+};
+
+const ColumnCardsContainer: React.FC<ColumnCardsContainerProps> = ({ colId, children }) => {
+  const { setNodeRef } = useDroppable({ id: colId });
+  return (
+    <div ref={setNodeRef} className="cards-container-whiteboard">
+      {children}
+    </div>
+  );
+};
+
 
 // Helper to convert time strings (like "10:00 AM", "6:00 PM") to minutes for client-side sorting
 const parseTimeToMinutes = (timeStr: string | undefined): number => {
@@ -107,26 +136,6 @@ export const KanbanBoard: React.FC = () => {
     console.log(`🔌 Initializing SocketIoYjsProvider for plan: ${planId}`);
     const provider = new SocketIoYjsProvider(planId, yDoc, socket);
 
-    // Initialize custom columns order and metadata in Yjs if they do not exist
-    yDoc.transact(() => {
-      const orderArray = getSharedColumnOrder(yDoc);
-      const metadataMap = getSharedColumnMetadata(yDoc);
-      const columnsMap = getSharedColumns(yDoc);
-
-      if (orderArray.length === 0) {
-        // Default itinerary days setup
-        orderArray.push(["day_1", "day_2", "day_3"]);
-
-        metadataMap.set("day_1", { id: "day_1", title: "DAY 1: EXPLORE" });
-        metadataMap.set("day_2", { id: "day_2", title: "DAY 2: RELAX & EAT" });
-        metadataMap.set("day_3", { id: "day_3", title: "DAY 3: NATURE" });
-
-        if (!columnsMap.has("day_1")) columnsMap.set("day_1", new Y.Array<string>());
-        if (!columnsMap.has("day_2")) columnsMap.set("day_2", new Y.Array<string>());
-        if (!columnsMap.has("day_3")) columnsMap.set("day_3", new Y.Array<string>());
-      }
-    });
-
     return () => {
       provider.destroy();
     };
@@ -134,7 +143,191 @@ export const KanbanBoard: React.FC = () => {
 
   // 4. Mutation Lock Guard & Dynamic Columns hook
   const [isDraggingLocal, setIsDraggingLocal] = useState(false);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const { columns, columnOrder, columnMetadata } = useYjsColumns(yDoc, isDraggingLocal);
+
+  // Read sidebar toggle state from layout context
+  const { isSidebarCollapsed, toggleSidebar } = useOutletContext<{
+    isSidebarCollapsed: boolean;
+    toggleSidebar: () => void;
+  }>();
+
+  // Figma-Style Pan & Zoom
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  const spacePressed = useRef(false);
+
+  // Spacebar listeners for panning Mode
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === "Space") {
+        const target = e.target as HTMLElement;
+        if (target.tagName !== "INPUT" && target.tagName !== "TEXTAREA" && !target.isContentEditable) {
+          spacePressed.current = true;
+          e.preventDefault();
+        }
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === "Space") {
+        spacePressed.current = false;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, []);
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    const isCanvas = 
+      target.classList.contains("board-canvas-area") || 
+      target.classList.contains("whiteboard-viewport") || 
+      target.classList.contains("board-columns-list");
+
+    const shouldPan = e.button === 1 || e.button === 2 || spacePressed.current || isCanvas;
+    
+    if (shouldPan) {
+      setIsPanning(true);
+      setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+      e.preventDefault();
+    }
+  };
+
+  const handleMouseMovePan = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (isPanning) {
+      setPan({
+        x: e.clientX - panStart.x,
+        y: e.clientY - panStart.y,
+      });
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsPanning(false);
+  };
+
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const zoomFactor = 0.08;
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    const canvasMouseX = (mouseX - pan.x) / zoom;
+    const canvasMouseY = (mouseY - pan.y) / zoom;
+
+    let nextZoom = zoom;
+    if (e.deltaY < 0) {
+      nextZoom = Math.min(2, zoom + zoomFactor);
+    } else {
+      nextZoom = Math.max(0.4, zoom - zoomFactor);
+    }
+
+    const nextPanX = mouseX - canvasMouseX * nextZoom;
+    const nextPanY = mouseY - canvasMouseY * nextZoom;
+
+    setZoom(nextZoom);
+    setPan({ x: nextPanX, y: nextPanY });
+  };
+
+  // Scale sortable item movement inside the zoomed board while keeping DragOverlay pointer-locked.
+  const zoomModifier = useMemo(() => {
+    return ({ transform }: { transform: any }) => {
+      return {
+        ...transform,
+        x: transform.x / zoom,
+        y: transform.y / zoom,
+      };
+    };
+  }, [zoom]);
+
+  // Workspace and Board metadata state
+  const [workspaceDetails, setWorkspaceDetails] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+  const [showEditBoardModal, setShowEditBoardModal] = useState(false);
+  const [tempWorkspaceName, setTempWorkspaceName] = useState("");
+  const [tempBoardName, setTempBoardName] = useState("");
+  const [tempBoardDesc, setTempBoardDesc] = useState("");
+  const [saveDetailsLoading, setSaveDetailsLoading] = useState(false);
+
+  // Fetch workspace details
+  useEffect(() => {
+    const fetchWorkspaceMetadata = async () => {
+      if (!boardDetails?.workspaceId) return;
+      try {
+        const res = await httpClient.get(`/workspaces/${boardDetails.workspaceId}`);
+        const ws = res.data?.data;
+        if (ws) {
+          setWorkspaceDetails({
+            id: ws.id,
+            name: ws.name,
+          });
+        }
+      } catch (err) {
+        console.error("❌ Failed to fetch workspace details:", err);
+      }
+    };
+    fetchWorkspaceMetadata();
+  }, [boardDetails?.workspaceId]);
+
+  const handleOpenEditBoardModal = () => {
+    setTempWorkspaceName(workspaceDetails?.name || "");
+    setTempBoardName(boardDetails?.name || "");
+    setTempBoardDesc(boardDetails?.description || "");
+    setShowEditBoardModal(true);
+  };
+
+  const handleSaveBoardAndWorkspace = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tempBoardName.trim() || !tempWorkspaceName.trim() || !planId || !boardDetails?.workspaceId) return;
+
+    try {
+      setSaveDetailsLoading(true);
+
+      // Update Workspace
+      await httpClient.patch(`/workspaces/${boardDetails.workspaceId}`, {
+        name: tempWorkspaceName,
+      });
+
+      // Update Plan Board
+      await httpClient.patch(`/plans/${planId}`, {
+        name: tempBoardName,
+        description: tempBoardDesc,
+      });
+
+      // Update local states
+      setBoardDetails((prev) => prev ? {
+        ...prev,
+        name: tempBoardName,
+        description: tempBoardDesc,
+      } : null);
+
+      setWorkspaceDetails((prev) => prev ? {
+        ...prev,
+        name: tempWorkspaceName,
+      } : null);
+
+      setShowEditBoardModal(false);
+    } catch (err: any) {
+      console.error("❌ Failed to save board and workspace details:", err);
+      alert(`❌ Failed to save details: ${err.response?.data?.error?.message || err.message}`);
+    } finally {
+      setSaveDetailsLoading(false);
+    }
+  };
 
   // Column CRUD and Invite States
   const [editingColumnId, setEditingColumnId] = useState<string | null>(null);
@@ -146,13 +339,14 @@ export const KanbanBoard: React.FC = () => {
   const [inviteLoading, setInviteLoading] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
-  // 5. Awareness Layer
+  // 5. Awareness Layer (Tracking is scoped to the zoomed whiteboard viewport ref)
   const canvasRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
   const { remoteCursors, updateFocusedItem } = useYjsAwareness(
     socket,
     planId,
     currentUser,
-    canvasRef
+    viewportRef // Setting the tracking viewport wrapper enables auto canvas coordinates mapping
   );
 
   // 6. Task Details Modal
@@ -186,8 +380,42 @@ export const KanbanBoard: React.FC = () => {
     return null;
   };
 
+  const handleDeleteTask = (taskId: string) => {
+    if (!yDoc) return;
+    if (!window.confirm("Are you sure you want to delete this activity?")) return;
+    
+    yDoc.transact(() => {
+      const columnsMap = getSharedColumns(yDoc);
+      const itemsMap = getSharedItems(yDoc);
+      const sourceCol = findColumnOfTaskId(taskId);
+      
+      if (sourceCol) {
+        const sourceArray = columnsMap.get(sourceCol);
+        if (sourceArray) {
+          const index = sourceArray.toArray().indexOf(taskId);
+          if (index !== -1) {
+            sourceArray.delete(index);
+          }
+        }
+      }
+      
+      itemsMap.delete(taskId);
+    });
+  };
+
+  const getActiveCardThemeColor = (): "teal" | "purple" | "rose" => {
+    if (!activeId) return "teal";
+    const colId = findColumnOfTaskId(activeId);
+    if (!colId) return "teal";
+    const index = columnOrder.indexOf(colId);
+    if (index === -1) return "teal";
+    const themes: Array<"teal" | "purple" | "rose"> = ["teal", "purple", "rose"];
+    return themes[index % 3];
+  };
+
   const handleDragStart = (event: DragStartEvent) => {
     setIsDraggingLocal(true);
+    setActiveId(event.active.id as string);
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -408,16 +636,40 @@ export const KanbanBoard: React.FC = () => {
 
   return (
     <div className="kanban-container">
-      {/* Board Header */}
-      <header className="kanban-header">
+      {/* Board Header (Whiteboard styled) */}
+      <header className="kanban-header whiteboard">
         <div className="board-info-section">
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", color: "#94a3b8", textTransform: "uppercase" }}>
+              Workspace: {workspaceDetails?.name || "Loading..."}
+            </span>
+          </div>
+
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
+            {isSidebarCollapsed && (
+              <button
+                onClick={toggleSidebar}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "#64748b",
+                  cursor: "pointer",
+                  padding: 4,
+                  display: "flex",
+                  alignItems: "center",
+                  marginRight: 4
+                }}
+                title="Expand Sidebar"
+              >
+                <Menu size={18} />
+              </button>
+            )}
             <button
               onClick={() => navigate("/")}
               style={{
                 background: "transparent",
                 border: "none",
-                color: "var(--text-muted)",
+                color: "#64748b",
                 cursor: "pointer",
                 padding: 4,
                 display: "flex",
@@ -427,14 +679,37 @@ export const KanbanBoard: React.FC = () => {
               <ArrowLeft size={18} />
             </button>
             <h2>{boardDetails?.name}</h2>
+            <button
+              onClick={handleOpenEditBoardModal}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "#64748b",
+                cursor: "pointer",
+                padding: 4,
+                display: "flex",
+                alignItems: "center",
+                borderRadius: 4,
+              }}
+              title="Edit Board & Workspace Details"
+            >
+              <Settings size={16} />
+            </button>
+            <div className="location-pill-whiteboard">
+              <MapPin size={12} />
+              <span>VIETNAM</span>
+            </div>
           </div>
           <p>{boardDetails?.description || "Collaborative co-op trip space"}</p>
         </div>
 
         {/* Collaborators Active List & Invite Peers shortcut */}
         <div className="board-collaborators" style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, color: "var(--success)" }}>
-            <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", backgroundColor: "var(--success)", animation: "fadeIn 1.5s infinite" }} />
+          <div className="online-status-whiteboard">
+            <span className="relative flex h-2.5 w-2.5" style={{ display: "inline-flex", width: 10, height: 10, position: "relative" }}>
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" style={{ position: "absolute", inset: 0, borderRadius: "50%" }}></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" style={{ position: "relative", display: "inline-block", width: 10, height: 10, borderRadius: "50%" }}></span>
+            </span>
             <span>LIVE: {uniqueCollaborators.length} ONLINE</span>
           </div>
 
@@ -450,7 +725,7 @@ export const KanbanBoard: React.FC = () => {
                   <img src={c.avatarUrl} alt={c.name} />
                 ) : (
                   <div className="presence-bubble-placeholder" style={{ backgroundColor: c.color }}>
-                    {c.name.substring(0, 2)}
+                    {c.name.substring(0, 1).toUpperCase()}
                   </div>
                 )}
               </div>
@@ -459,171 +734,283 @@ export const KanbanBoard: React.FC = () => {
 
           <button
             className="icon-action-btn"
-            style={{
-              borderColor: "var(--primary)",
-              color: "#fff",
-              background: "linear-gradient(135deg, var(--primary), var(--secondary))",
-              boxShadow: "0 0 10px var(--primary-glow)",
-            }}
             onClick={() => setShowInviteModal(true)}
+            style={{ fontWeight: 600, fontSize: 13 }}
           >
             + Invite Peers
           </button>
         </div>
       </header>
 
-      {/* Board Canvas */}
-      <div className="board-canvas-area" ref={canvasRef}>
+      {/* Board Canvas (Figma-style pan/zoom handlers attached) */}
+      <div 
+        className="board-canvas-area whiteboard" 
+        ref={canvasRef}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMovePan}
+        onMouseUp={handleMouseUp}
+        onWheel={handleWheel}
+        style={{ cursor: isPanning ? "grabbing" : spacePressed.current ? "grab" : "default" }}
+      >
         <DndContext
           sensors={sensors}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
+          modifiers={[zoomModifier]}
         >
-          <div className="board-columns-list">
-            {columnOrder.map((colId) => {
-              const taskIds = columns[colId] || [];
-              const metadata = columnMetadata[colId];
-              const columnTitle = metadata?.title || `DAY ${colId.toUpperCase()}`;
+          {/* Transforming viewport containing columns & nested cursors layer */}
+          <div 
+            ref={viewportRef}
+            className="whiteboard-viewport"
+            style={{
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+              transformOrigin: "0 0",
+              width: "max-content",
+              height: "max-content",
+              minWidth: "100%",
+              minHeight: "100%",
+              display: "flex",
+              alignItems: "flex-start",
+              position: "relative",
+            }}
+          >
+            <div className="board-columns-list">
+              {columnOrder.map((colId, index) => {
+                const taskIds = columns[colId] || [];
+                const metadata = columnMetadata[colId];
+                const columnTitle = metadata?.title || `DAY ${colId.toUpperCase()}`;
 
-              // Dynamic local chronological sort by time
-              const itemsMap = getSharedItems(yDoc);
-              const sortedTaskIds = [...taskIds].sort((a, b) => {
-                const itemA = itemsMap.get(a) as Y.Map<any> | undefined;
-                const itemB = itemsMap.get(b) as Y.Map<any> | undefined;
-                const timeA = itemA?.get("time");
-                const timeB = itemB?.get("time");
-                return parseTimeToMinutes(timeA) - parseTimeToMinutes(timeB);
-              });
+                // Cycle color themes: teal, purple, rose
+                const themes: Array<"teal" | "purple" | "rose"> = ["teal", "purple", "rose"];
+                const themeColor = themes[index % 3];
 
-              return (
-                <div key={colId} className="kanban-column">
-                  <div className="column-header">
-                    <div className="column-title" style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, overflow: "hidden" }}>
-                      {editingColumnId === colId ? (
-                        <input
-                          type="text"
-                          value={editingColumnTitle}
-                          onChange={(e) => setEditingColumnTitle(e.target.value)}
-                          onBlur={() => handleSaveColumnTitle(colId)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") handleSaveColumnTitle(colId);
-                          }}
-                          autoFocus
-                          style={{
-                            fontSize: 13,
-                            fontWeight: 700,
-                            background: "rgba(255, 255, 255, 0.05)",
-                            border: "1px solid var(--primary)",
-                            borderRadius: 6,
-                            color: "#fff",
-                            padding: "2px 6px",
-                            width: "90%",
-                          }}
-                        />
-                      ) : (
-                        <h3
-                          onDoubleClick={() => handleStartEditColumn(colId, columnTitle)}
-                          style={{ cursor: "pointer", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                          title="Double click to rename"
+                // Dynamic local chronological sort by time
+                const itemsMap = getSharedItems(yDoc);
+                const sortedTaskIds = [...taskIds].sort((a, b) => {
+                  const itemA = itemsMap.get(a) as Y.Map<any> | undefined;
+                  const itemB = itemsMap.get(b) as Y.Map<any> | undefined;
+                  const timeA = itemA?.get("time");
+                  const timeB = itemB?.get("time");
+                  return parseTimeToMinutes(timeA) - parseTimeToMinutes(timeB);
+                });
+
+                return (
+                  <div key={colId} className="kanban-column-whiteboard">
+                    {/* Floating Header Card */}
+                    <div className="column-header-card">
+                      <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, overflow: "hidden" }}>
+                        <div className={`day-badge ${themeColor}`}>
+                          D{index + 1}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          {editingColumnId === colId ? (
+                            <input
+                              type="text"
+                              value={editingColumnTitle}
+                              onChange={(e) => setEditingColumnTitle(e.target.value)}
+                              onBlur={() => handleSaveColumnTitle(colId)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") handleSaveColumnTitle(colId);
+                              }}
+                              autoFocus
+                              className="column-title-input-whiteboard"
+                            />
+                          ) : (
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                              <h3
+                                onDoubleClick={() => handleStartEditColumn(colId, columnTitle)}
+                                style={{ cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}
+                                title="Double click to rename"
+                              >
+                                {columnTitle}
+                              </h3>
+                              <button
+                                onClick={() => handleStartEditColumn(colId, columnTitle)}
+                                style={{
+                                  background: "transparent",
+                                  border: "none",
+                                  color: "#94a3b8",
+                                  cursor: "pointer",
+                                  padding: 2,
+                                  display: "flex",
+                                  alignItems: "center",
+                                }}
+                                title="Rename Day"
+                              >
+                                <Edit2 size={12} />
+                              </button>
+                            </div>
+                          )}
+                          <p style={{ fontSize: 11, color: "#94a3b8", fontWeight: 500, marginTop: 2 }}>
+                            {taskIds.length} {taskIds.length === 1 ? "Activity" : "Activities"}
+                          </p>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <button
+                          className="create-task-inline-btn"
+                          onClick={() => handleCreateTask(colId)}
+                          title="Add Activity"
                         >
-                          {columnTitle}
-                        </h3>
-                      )}
-                      <span className="task-count">{taskIds.length}</span>
+                          <Plus size={14} />
+                        </button>
+                        <button
+                          className="create-task-inline-btn"
+                          onClick={() => handleDeleteColumn(colId)}
+                          title="Delete Day"
+                          style={{ color: "#94a3b8" }}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                      <button
-                        className="create-task-inline-btn"
-                        onClick={() => handleCreateTask(colId)}
-                        title="Add Activity"
-                      >
-                        <Plus size={14} />
-                      </button>
-                      <button
-                        className="create-task-inline-btn"
-                        onClick={() => handleDeleteColumn(colId)}
-                        title="Delete Day"
-                        style={{ color: "var(--text-muted)" }}
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
+
+                    {/* Cards Container with DND droppable registration */}
+                    <SortableContext
+                      items={sortedTaskIds}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      <ColumnCardsContainer colId={colId}>
+                        {sortedTaskIds.map((taskId) => {
+                          const focusingCollaborators = remoteCursors
+                            .filter((c) => c.focusedItemId === taskId)
+                            .map((c) => ({
+                              name: c.name,
+                              color: c.color,
+                              avatarUrl: c.avatarUrl,
+                            }));
+
+                          return (
+                            <BoardTaskCard
+                              key={taskId}
+                              taskId={taskId}
+                              yDoc={yDoc}
+                              onClick={() => handleOpenTaskDetails(taskId)}
+                              focusingCollaborators={focusingCollaborators}
+                              themeColor={themeColor}
+                              onDelete={() => handleDeleteTask(taskId)}
+                            />
+                          );
+                        })}
+                      </ColumnCardsContainer>
+                    </SortableContext>
+
+                    {/* Dashed Column Add Plan Button */}
+                    <button
+                      className="add-plan-dashed-btn"
+                      onClick={() => handleCreateTask(colId)}
+                    >
+                      <Plus size={16} />
+                      <span>ADD PLAN</span>
+                    </button>
                   </div>
+                );
+              })}
 
-                  <SortableContext
-                    items={sortedTaskIds}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    <div className="cards-container">
-                      {sortedTaskIds.map((taskId) => {
-                        const focusingCollaborators = remoteCursors
-                          .filter((c) => c.focusedItemId === taskId)
-                          .map((c) => ({
-                            name: c.name,
-                            color: c.color,
-                            avatarUrl: c.avatarUrl,
-                          }));
-
-                        return (
-                          <BoardTaskCard
-                            key={taskId}
-                            taskId={taskId}
-                            yDoc={yDoc}
-                            onClick={() => handleOpenTaskDetails(taskId)}
-                            focusingCollaborators={focusingCollaborators}
-                          />
-                        );
-                      })}
-                    </div>
-                  </SortableContext>
-                </div>
-              );
-            })}
-
-            {/* Add Column button */}
-            <button
-              onClick={handleAddColumn}
-              className="add-plan-card"
-              style={{
-                width: 320,
-                height: 52,
-                minHeight: 52,
-                flexShrink: 0,
-                borderStyle: "dashed",
-                display: "flex",
-                flexDirection: "row",
-                fontSize: 13,
-                fontWeight: 700,
-                gap: 8,
-              }}
-            >
-              <Plus size={16} />
-              <span>Add Day / Milestone</span>
-            </button>
-          </div>
-        </DndContext>
-
-        {/* Remote Cursors Overlay */}
-        <div className="remote-cursor-layer">
-          {remoteCursors
-            .filter((c) => c.x !== undefined && c.y !== undefined)
-            .map((c) => (
-              <div
-                key={c.clientId}
-                className="remote-cursor"
+              {/* Add Column button */}
+              <button
+                onClick={handleAddColumn}
+                className="add-plan-dashed-btn"
                 style={{
-                  left: `${c.x! * 100}%`,
-                  top: `${c.y! * 100}%`,
-                  color: c.color,
+                  width: 320,
+                  height: 72,
+                  minHeight: 72,
+                  flexShrink: 0,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  display: "flex",
+                  flexDirection: "row",
+                  gap: 8,
+                  borderStyle: "dashed",
                 }}
               >
-                <div className="cursor-pointer-dot" />
-                <div className="cursor-pointer-flag" style={{ backgroundColor: c.color }}>
-                  {c.name}
-                </div>
+                <Plus size={16} />
+                <span>Add Day / Milestone</span>
+              </button>
+            </div>
+
+            {/* Remote Cursors Overlay (Inside viewport for proper scaling alignment) */}
+            <div className="remote-cursor-layer" style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 40 }}>
+              {remoteCursors
+                .filter((c) => c.x !== undefined && c.y !== undefined)
+                .map((c) => (
+                  <div
+                    key={c.clientId}
+                    style={{
+                      position: "absolute",
+                      left: `${c.x! * 100}%`,
+                      top: `${c.y! * 100}%`,
+                      zIndex: 50,
+                      pointerEvents: "none",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "flex-start",
+                      // Apply counter-scaling so cursor elements stay at constant visual size
+                      transform: `scale(${1 / zoom})`,
+                      transformOrigin: "0 0",
+                      transition: "left 0.15s ease-out, top 0.15s ease-out",
+                    }}
+                  >
+                    <div style={{ position: "relative", display: "inline-flex" }}>
+                      <svg 
+                        width="24" height="24" viewBox="0 0 24 24" fill="none" 
+                        xmlns="http://www.w3.org/2000/svg"
+                        style={{ filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.15))" }}
+                      >
+                        <path d="M5.5 3.21V20.8C5.5 21.6 6.38 22.08 7.04 21.65L10.82 19.16C11.08 18.99 11.4 18.92 11.71 18.97L16.29 19.68C17.06 19.8 17.65 19.06 17.37 18.33L10.37 3.01C10.02 2.23 8.88 2.31 8.65 3.13L5.5 3.21Z" fill={c.color} stroke="white" strokeWidth="1.5"/>
+                      </svg>
+                      <div 
+                        className="animate-pulse-ring" 
+                        style={{ 
+                          position: "absolute", 
+                          top: 4, 
+                          left: 4, 
+                          width: 12, 
+                          height: 12, 
+                          borderRadius: "50%", 
+                          backgroundColor: c.color,
+                          zIndex: -1,
+                        }} 
+                      />
+                    </div>
+                    <div 
+                      style={{
+                        backgroundColor: c.color,
+                        marginTop: 4,
+                        marginLeft: 12,
+                        padding: "2px 6px",
+                        borderRadius: 4,
+                        boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
+                        fontSize: 9,
+                        fontWeight: 700,
+                        color: "white",
+                        letterSpacing: "0.05em",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {c.name}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+
+          {/* Floating DragOverlay styled preview */}
+          <DragOverlay dropAnimation={null}>
+            {activeId ? (
+              <div className="drag-overlay-card">
+                <BoardTaskCard
+                  taskId={activeId}
+                  yDoc={yDoc}
+                  onClick={() => {}}
+                  focusingCollaborators={[]}
+                  themeColor={getActiveCardThemeColor()}
+                  isOverlay
+                />
               </div>
-            ))}
-        </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       </div>
 
       {/* Task Edit Modal Overlay */}
@@ -712,6 +1099,78 @@ export const KanbanBoard: React.FC = () => {
                   disabled={inviteLoading || !inviteEmail.trim()}
                 >
                   {inviteLoading ? "Sending..." : "Send Invite"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Board & Workspace Details Modal */}
+      {showEditBoardModal && (
+        <div className="modal-backdrop" onClick={() => setShowEditBoardModal(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: "var(--text-main)" }}>Edit Board & Workspace</h2>
+              <button
+                onClick={() => setShowEditBoardModal(false)}
+                style={{ background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer" }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveBoardAndWorkspace}>
+              <div style={{ padding: "0 0 16px 0", borderBottom: "1px solid var(--border-color)", marginBottom: 16 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 600, color: "var(--text-muted)", marginBottom: 12 }}>WORKSPACE</h3>
+                <div className="form-group">
+                  <label>Workspace Name</label>
+                  <input
+                    type="text"
+                    value={tempWorkspaceName}
+                    onChange={(e) => setTempWorkspaceName(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <h3 style={{ fontSize: 14, fontWeight: 600, color: "var(--text-muted)", marginBottom: 12 }}>PLAN BOARD</h3>
+                <div className="form-group">
+                  <label>Board Name</label>
+                  <input
+                    type="text"
+                    value={tempBoardName}
+                    onChange={(e) => setTempBoardName(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Description</label>
+                  <textarea
+                    value={tempBoardDesc}
+                    onChange={(e) => setTempBoardDesc(e.target.value)}
+                    rows={3}
+                  />
+                </div>
+              </div>
+
+              <div className="modal-actions" style={{ marginTop: 24 }}>
+                <button
+                  type="button"
+                  className="modal-btn btn-secondary"
+                  onClick={() => setShowEditBoardModal(false)}
+                  disabled={saveDetailsLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="modal-btn btn-primary"
+                  disabled={saveDetailsLoading || !tempBoardName.trim() || !tempWorkspaceName.trim()}
+                >
+                  {saveDetailsLoading ? "Saving..." : "Save Changes"}
                 </button>
               </div>
             </form>

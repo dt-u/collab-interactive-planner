@@ -4,8 +4,9 @@ import { useParams } from "react-router-dom";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useYjsDocument } from "../../collaborative-editor/hooks/useYjsDocument.js";
-import { Clock, DollarSign, FileText } from "lucide-react";
+import { Clock, MessageSquare, Trash2 } from "lucide-react";
 import { httpClient } from "../../../shared/api/http-client.js";
+
 
 interface BoardTaskCardProps {
   taskId: string;
@@ -16,6 +17,9 @@ interface BoardTaskCardProps {
     color: string;
     avatarUrl?: string;
   }>;
+  themeColor?: "teal" | "purple" | "rose";
+  isOverlay?: boolean;
+  onDelete?: () => void;
 }
 
 export const BoardTaskCard: React.FC<BoardTaskCardProps> = ({
@@ -23,6 +27,9 @@ export const BoardTaskCard: React.FC<BoardTaskCardProps> = ({
   yDoc,
   onClick,
   focusingCollaborators,
+  themeColor = "teal",
+  isOverlay = false,
+  onDelete,
 }) => {
   const { planId } = useParams<{ planId: string }>();
   const { task } = useYjsDocument(yDoc, taskId);
@@ -57,15 +64,15 @@ export const BoardTaskCard: React.FC<BoardTaskCardProps> = ({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: taskId });
+  } = useSortable({ id: taskId, disabled: isOverlay });
 
   const isFocusedByRemote = focusingCollaborators.length > 0;
   const focusColor = isFocusedByRemote ? focusingCollaborators[0].color : undefined;
 
   const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.3 : 1,
+    transform: isOverlay ? undefined : CSS.Transform.toString(transform),
+    transition: isDragging || isOverlay ? "none" : transition,
+    opacity: isDragging && !isOverlay ? 0.05 : 1,
     border: focusColor ? `2px solid ${focusColor}` : undefined,
     boxShadow: focusColor ? `0 0 15px ${focusColor}` : undefined,
   };
@@ -74,76 +81,154 @@ export const BoardTaskCard: React.FC<BoardTaskCardProps> = ({
 
   const coverSrc = task.image || fallbackImage;
 
+  // Inline color mappings matching the day badge themes
+  const accentColorMap = {
+    teal: "#2dd4bf",
+    purple: "#c084fc",
+    rose: "#f43f5e",
+  };
+
   return (
     <div
-      ref={setNodeRef}
+      ref={isOverlay ? undefined : setNodeRef}
       style={style}
-      {...attributes}
-      {...listeners}
-      className={`task-card ${isFocusedByRemote ? "card-focused-remote" : ""}`}
+      {...(isOverlay ? {} : attributes)}
+      {...(isOverlay ? {} : listeners)}
+      className={`whiteboard-task-card ${isFocusedByRemote ? "card-focused-remote" : ""}`}
       onClick={onClick}
     >
-      {/* Cover Image / Gradient */}
-      {coverSrc ? (
-        <div className="task-card-cover-container">
-          <img src={coverSrc} alt={task.title} className="task-card-cover" />
-        </div>
-      ) : (
-        <div className="task-card-cover-container neon-gradient-cover" />
-      )}
-
-      {/* Time Badge (Glassmorphic) */}
-      <div className="time-badge">
-        <Clock size={11} className="time-badge-icon" />
-        <span>{task.time || "Flexible"}</span>
-      </div>
-
-      <div className="task-card-content" style={{ marginTop: 12 }}>
-        <div className="task-card-title">{task.title || "Untitled Activity"}</div>
-        {task.description && (
-          <div className="task-card-desc">{task.description}</div>
-        )}
-      </div>
-      
-      <div className="task-card-footer" style={{ marginTop: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {/* Cost Tag */}
-          <div className="cost-tag">
-            <DollarSign size={12} style={{ marginRight: 2 }} />
-            <span>{task.cost || "Free"}</span>
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <FileText size={12} style={{ color: "var(--text-muted)" }} />
-            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-              Details
-            </span>
-          </div>
+      {/* Top row: Time badge & Remote peer presence */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div className={`time-badge-pill ${themeColor}`}>
+          <Clock size={12} className="spin-gently" />
+          <span>{task.time || "Flexible"}</span>
         </div>
 
-        {/* Focusing Remote Users */}
         {isFocusedByRemote && (
-          <div className="task-card-assignees">
+          <div style={{ display: "flex", gap: 2, alignItems: "center" }}>
             {focusingCollaborators.map((c, i) => (
               <div
                 key={i}
-                className="card-assignee-bubble"
-                style={{ borderColor: c.color }}
-                title={`${c.name} is viewing this task`}
+                style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: "50%",
+                  border: `2px solid ${c.color}`,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 8,
+                  fontWeight: 700,
+                  color: "#ffffff",
+                  backgroundColor: c.color,
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+                }}
+                title={`${c.name} is viewing`}
               >
                 {c.avatarUrl ? (
                   <img
                     src={c.avatarUrl}
                     alt={c.name}
-                    style={{ width: "100%", height: "100%", borderRadius: "50%" }}
+                    style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }}
                   />
                 ) : (
-                  c.name.substring(0, 2)
+                  c.name.substring(0, 1).toUpperCase()
                 )}
               </div>
             ))}
           </div>
         )}
+      </div>
+
+      {/* Middle row: Card title, description, and thumbnail */}
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="whiteboard-task-card-title" style={{ marginBottom: 4 }}>
+            {task.title || "Untitled Activity"}
+          </div>
+          {task.description && (
+            <div 
+              className="whiteboard-task-card-desc" 
+              style={{
+                backgroundColor: "#f8fafc",
+                borderRadius: 8,
+                padding: "8px 10px",
+                border: "1px solid #f1f5f9",
+                fontSize: 11,
+                color: "#475569",
+                position: "relative",
+                overflow: "hidden",
+              }}
+            >
+              <span 
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: 3,
+                  backgroundColor: accentColorMap[themeColor],
+                }} 
+              />
+              <span style={{ paddingLeft: 6, display: "block" }}>{task.description}</span>
+            </div>
+          )}
+        </div>
+        {coverSrc && (
+          <div className="whiteboard-task-card-thumbnail">
+            <img src={coverSrc} alt={task.title} />
+          </div>
+        )}
+      </div>
+
+      {/* Bottom row: Details trigger & Cost tag */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid #f1f5f9", paddingTop: 8, marginTop: 4 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 4, color: "#94a3b8", fontSize: 11, fontWeight: 500 }}>
+            <MessageSquare size={13} />
+            <span>Details</span>
+          </div>
+          {onDelete && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "#94a3b8",
+                cursor: "pointer",
+                padding: "2px 4px",
+                display: "flex",
+                alignItems: "center",
+                borderRadius: 4,
+                transition: "color 0.2s, background-color 0.2s",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = "#ef4444";
+                e.currentTarget.style.backgroundColor = "#fee2e2";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = "#94a3b8";
+                e.currentTarget.style.backgroundColor = "transparent";
+              }}
+              title="Delete Activity"
+            >
+              <Trash2 size={13} />
+            </button>
+          )}
+        </div>
+
+        <div className="cost-tag-whiteboard hover-wiggle">
+          {task.cost && task.cost.trim() !== "" && task.cost.trim().toUpperCase() !== "0 VND" ? (
+            `COST: ${task.cost}`
+          ) : (
+            "FREE"
+          )}
+        </div>
       </div>
     </div>
   );
