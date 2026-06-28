@@ -9,8 +9,8 @@ export const LoginPage: React.FC = () => {
     <div className="login-view-wrapper">
       <div className="login-glass-card">
         <div className="login-brand">
-          <span className="brand-icon">ICP</span>
-          <span className="brand-name">Interactive Planner</span>
+          <span className="brand-icon">PU</span>
+          <span className="brand-name">PACKUP</span>
         </div>
         <h1 className="login-title">Welcome Back</h1>
         <p className="login-subtitle">Real-time collaborative planning boards</p>

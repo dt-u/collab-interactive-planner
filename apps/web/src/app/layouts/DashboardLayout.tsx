@@ -69,8 +69,8 @@ export const DashboardLayout: React.FC = () => {
       <aside className={`app-sidebar ${isSidebarCollapsed ? "collapsed" : ""}`}>
         <div className="sidebar-brand" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, overflow: "hidden" }}>
-            <span className="brand-icon">ICP</span>
-            <span className="brand-name" style={{ whiteSpace: "nowrap" }}>Interactive Planner</span>
+            <span className="brand-icon">PU</span>
+            <span className="brand-name" style={{ whiteSpace: "nowrap" }}>PACKUP</span>
           </div>
           <button 
             onClick={toggleSidebar}

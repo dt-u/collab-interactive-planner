@@ -710,7 +710,7 @@ body {
   height: 48px;
 }
 
-/* Interactive Planner Kanban Board Styling */
+/* PACKUP Kanban Board Styling */
 .kanban-container {
   display: flex;
   flex-direction: column;
