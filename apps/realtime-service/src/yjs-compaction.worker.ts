@@ -98,13 +98,13 @@ async function releaseLock(lockKey: string, lockToken: string): Promise<void> {
  */
 export function startCompactionScheduler(intervalMs: number = 300000): NodeJS.Timeout {
   console.log(`⏱️ Starting Compaction Scheduler (Interval: ${intervalMs / 1000}s)`);
-  
+
   return setInterval(async () => {
     const activeDocIds = documentRegistry.keys();
     if (activeDocIds.length === 0) return;
 
-    console.log(`⏱️ [Compaction Scheduler] Running checks for ${activeDocIds.length} active documents...`);
-    
+    console.log(`[Compaction Scheduler] Running checks for ${activeDocIds.length} active documents...`);
+
     for (const docId of activeDocIds) {
       await compactDocument(docId);
     }
