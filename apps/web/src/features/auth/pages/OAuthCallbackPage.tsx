@@ -33,7 +33,7 @@ export const OAuthCallbackPage: React.FC = () => {
           throw new Error("Invalid callback payload from authentication server");
         }
       } catch (err: any) {
-        console.error("❌ Google OAuth code exchange failed:", err);
+        console.error("Google OAuth code exchange failed:", err);
         setError(err.response?.data?.error?.message || "Failed to authenticate with Google. Please try again.");
       }
     };

@@ -26,7 +26,7 @@ import {
 import { httpClient } from "../../../shared/api/http-client.js";
 import { BoardTaskCard } from "./BoardTaskCard.js";
 import { TaskDetailModal } from "./TaskDetailModal.js";
-import { Plus, ArrowLeft, Trash2, X, Copy, MapPin, Menu, Settings, Edit2 } from "lucide-react";
+import { Plus, ArrowLeft, Trash2, X, Copy, MapPin, Menu, Settings, Edit2, CheckCircle2, AlertCircle, Crosshair } from "lucide-react";
 import { Spinner } from "../../../shared/ui/spinner/Spinner.js";
 
 interface ColumnCardsContainerProps {
@@ -109,7 +109,7 @@ export const KanbanBoard: React.FC = () => {
           setMetadataError("Plan not found");
         }
       } catch (err: any) {
-        console.error("❌ Failed to fetch plan metadata:", err);
+        console.error("Failed to fetch plan metadata:", err);
         setMetadataError(err.response?.data?.error?.message || "Failed to load plan metadata");
       } finally {
         setLoadingMetadata(false);
@@ -133,7 +133,7 @@ export const KanbanBoard: React.FC = () => {
   useEffect(() => {
     if (!socket || !joined || !planId) return;
 
-    console.log(`🔌 Initializing SocketIoYjsProvider for plan: ${planId}`);
+    console.log(`Initializing SocketIoYjsProvider for plan: ${planId}`);
     const provider = new SocketIoYjsProvider(planId, yDoc, socket);
 
     return () => {
@@ -263,6 +263,99 @@ export const KanbanBoard: React.FC = () => {
   const [tempBoardDesc, setTempBoardDesc] = useState("");
   const [saveDetailsLoading, setSaveDetailsLoading] = useState(false);
 
+  // Toast state
+  const [toast, setToast] = useState<{
+    message: string;
+    type: "success" | "error" | "info";
+  } | null>(null);
+
+  const showToast = (message: string, type: "success" | "error" | "info" = "info") => {
+    setToast({ message, type });
+  };
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  // Custom Confirm Dialog state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
+
+  const showConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setConfirmDialog({
+      isOpen: true,
+      title,
+      message,
+      onConfirm,
+    });
+  };
+
+  // Location and Inline editing states
+  const [localLocation, setLocalLocation] = useState("VIETNAM");
+  const [isEditingLocation, setIsEditingLocation] = useState(false);
+  const [editingLocationValue, setEditingLocationValue] = useState("");
+  const [isEditingPlanName, setIsEditingPlanName] = useState(false);
+  const [editingPlanNameValue, setEditingPlanNameValue] = useState("");
+
+  useEffect(() => {
+    if (!yDoc) return;
+    const planMetadataMap = yDoc.getMap("planMetadata");
+    
+    // Initial load
+    const currentLoc = planMetadataMap.get("location") as string;
+    if (currentLoc) {
+      setLocalLocation(currentLoc);
+    }
+
+    // Observe changes
+    const handleObserve = () => {
+      const loc = planMetadataMap.get("location") as string;
+      if (loc) {
+        setLocalLocation(loc);
+      }
+    };
+    planMetadataMap.observe(handleObserve);
+
+    return () => {
+      planMetadataMap.unobserve(handleObserve);
+    };
+  }, [yDoc]);
+
+  const handleSaveLocationInline = () => {
+    if (!yDoc) return;
+    const planMetadataMap = yDoc.getMap("planMetadata");
+    const val = editingLocationValue.trim() || "VIETNAM";
+    yDoc.transact(() => {
+      planMetadataMap.set("location", val);
+    });
+    setLocalLocation(val);
+    setIsEditingLocation(false);
+  };
+
+  const handleSavePlanNameInline = async () => {
+    if (!editingPlanNameValue.trim() || !planId) {
+      setIsEditingPlanName(false);
+      return;
+    }
+    try {
+      await httpClient.patch(`/plans/${planId}`, {
+        name: editingPlanNameValue,
+      });
+      setBoardDetails((prev) => prev ? { ...prev, name: editingPlanNameValue } : null);
+    } catch (err: any) {
+      console.error("Failed to update plan name:", err);
+      showToast("Failed to update board name", "error");
+    } finally {
+      setIsEditingPlanName(false);
+    }
+  };
+
   // Fetch workspace details
   useEffect(() => {
     const fetchWorkspaceMetadata = async () => {
@@ -277,7 +370,7 @@ export const KanbanBoard: React.FC = () => {
           });
         }
       } catch (err) {
-        console.error("❌ Failed to fetch workspace details:", err);
+        console.error("Failed to fetch workspace details:", err);
       }
     };
     fetchWorkspaceMetadata();
@@ -322,8 +415,8 @@ export const KanbanBoard: React.FC = () => {
 
       setShowEditBoardModal(false);
     } catch (err: any) {
-      console.error("❌ Failed to save board and workspace details:", err);
-      alert(`❌ Failed to save details: ${err.response?.data?.error?.message || err.message}`);
+      console.error("Failed to save board and workspace details:", err);
+      showToast("Failed to save details: " + (err.response?.data?.error?.message || err.message), "error");
     } finally {
       setSaveDetailsLoading(false);
     }
@@ -382,25 +475,29 @@ export const KanbanBoard: React.FC = () => {
 
   const handleDeleteTask = (taskId: string) => {
     if (!yDoc) return;
-    if (!window.confirm("Are you sure you want to delete this activity?")) return;
-    
-    yDoc.transact(() => {
-      const columnsMap = getSharedColumns(yDoc);
-      const itemsMap = getSharedItems(yDoc);
-      const sourceCol = findColumnOfTaskId(taskId);
-      
-      if (sourceCol) {
-        const sourceArray = columnsMap.get(sourceCol);
-        if (sourceArray) {
-          const index = sourceArray.toArray().indexOf(taskId);
-          if (index !== -1) {
-            sourceArray.delete(index);
+    showConfirm(
+      "Delete Activity",
+      "Are you sure you want to delete this activity?",
+      () => {
+        yDoc.transact(() => {
+          const columnsMap = getSharedColumns(yDoc);
+          const itemsMap = getSharedItems(yDoc);
+          const sourceCol = findColumnOfTaskId(taskId);
+          
+          if (sourceCol) {
+            const sourceArray = columnsMap.get(sourceCol);
+            if (sourceArray) {
+              const index = sourceArray.toArray().indexOf(taskId);
+              if (index !== -1) {
+                sourceArray.delete(index);
+              }
+            }
           }
-        }
+          
+          itemsMap.delete(taskId);
+        });
       }
-      
-      itemsMap.delete(taskId);
-    });
+    );
   };
 
   const getActiveCardThemeColor = (): "teal" | "purple" | "rose" => {
@@ -533,26 +630,31 @@ export const KanbanBoard: React.FC = () => {
 
   const handleDeleteColumn = (colId: string) => {
     if (!yDoc) return;
-    if (!window.confirm("Are you sure you want to delete this day and all its activities?")) return;
-    yDoc.transact(() => {
-      const orderArray = getSharedColumnOrder(yDoc);
-      const metadataMap = getSharedColumnMetadata(yDoc);
-      const columnsMap = getSharedColumns(yDoc);
-      const itemsMap = getSharedItems(yDoc);
+    showConfirm(
+      "Delete Day",
+      "Are you sure you want to delete this day and all its activities?",
+      () => {
+        yDoc.transact(() => {
+          const orderArray = getSharedColumnOrder(yDoc);
+          const metadataMap = getSharedColumnMetadata(yDoc);
+          const columnsMap = getSharedColumns(yDoc);
+          const itemsMap = getSharedItems(yDoc);
 
-      const taskIds = columns[colId] || [];
-      taskIds.forEach((tid) => {
-        itemsMap.delete(tid);
-      });
+          const taskIds = columns[colId] || [];
+          taskIds.forEach((tid) => {
+            itemsMap.delete(tid);
+          });
 
-      const colIndex = orderArray.toArray().indexOf(colId);
-      if (colIndex !== -1) {
-        orderArray.delete(colIndex);
+          const colIndex = orderArray.toArray().indexOf(colId);
+          if (colIndex !== -1) {
+            orderArray.delete(colIndex);
+          }
+
+          metadataMap.delete(colId);
+          columnsMap.delete(colId);
+        });
       }
-
-      metadataMap.delete(colId);
-      columnsMap.delete(colId);
-    });
+    );
   };
 
   const handleInvitePeer = async (e: React.FormEvent) => {
@@ -566,10 +668,10 @@ export const KanbanBoard: React.FC = () => {
       });
       setInviteEmail("");
       setShowInviteModal(false);
-      alert("✅ Invitation sent successfully!");
+      showToast("Invitation sent successfully!", "success");
     } catch (err: any) {
-      console.error("❌ Failed to invite peer:", err);
-      alert(`❌ Failed to invite: ${err.response?.data?.error?.message || err.message}`);
+      console.error("Failed to invite peer:", err);
+      showToast("Failed to invite: " + (err.response?.data?.error?.message || err.message), "error");
     } finally {
       setInviteLoading(false);
     }
@@ -624,7 +726,7 @@ export const KanbanBoard: React.FC = () => {
     return (
       <div className="page-loading">
         <div style={{ color: "var(--danger)", fontSize: 16, fontWeight: 600 }}>
-          ❌ Connection Error: {metadataError || roomError}
+          Connection Error: {metadataError || roomError}
         </div>
         <button className="icon-action-btn" onClick={() => navigate("/")} style={{ marginTop: 16 }}>
           <ArrowLeft size={16} />
@@ -678,7 +780,44 @@ export const KanbanBoard: React.FC = () => {
             >
               <ArrowLeft size={18} />
             </button>
-            <h2>{boardDetails?.name}</h2>
+            
+            {isEditingPlanName ? (
+              <input
+                type="text"
+                value={editingPlanNameValue}
+                onChange={(e) => setEditingPlanNameValue(e.target.value)}
+                onBlur={handleSavePlanNameInline}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSavePlanNameInline();
+                  if (e.key === "Escape") setIsEditingPlanName(false);
+                }}
+                autoFocus
+                style={{
+                  fontSize: "24px",
+                  fontWeight: "800",
+                  background: "transparent",
+                  border: "none",
+                  borderBottom: "1px solid var(--border-color)",
+                  color: "var(--text-main)",
+                  outline: "none",
+                  padding: "0 4px",
+                  marginRight: "8px",
+                  maxWidth: "300px"
+                }}
+              />
+            ) : (
+              <h2 
+                onDoubleClick={() => {
+                  setEditingPlanNameValue(boardDetails?.name || "");
+                  setIsEditingPlanName(true);
+                }}
+                title="Double click to edit board name"
+                style={{ cursor: "pointer" }}
+              >
+                {boardDetails?.name}
+              </h2>
+            )}
+
             <button
               onClick={handleOpenEditBoardModal}
               style={{
@@ -695,10 +834,46 @@ export const KanbanBoard: React.FC = () => {
             >
               <Settings size={16} />
             </button>
-            <div className="location-pill-whiteboard">
-              <MapPin size={12} />
-              <span>VIETNAM</span>
-            </div>
+            
+            {isEditingLocation ? (
+              <input
+                type="text"
+                value={editingLocationValue}
+                onChange={(e) => setEditingLocationValue(e.target.value)}
+                onBlur={handleSaveLocationInline}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSaveLocationInline();
+                  if (e.key === "Escape") setIsEditingLocation(false);
+                }}
+                autoFocus
+                style={{
+                  background: "rgba(255,255,255,0.05)",
+                  border: "1px solid var(--border-color)",
+                  borderRadius: "20px",
+                  color: "#94a3b8",
+                  fontFamily: "inherit",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  width: "120px",
+                  outline: "none",
+                  padding: "4px 10px",
+                  textTransform: "uppercase"
+                }}
+              />
+            ) : (
+              <div 
+                className="location-pill-whiteboard"
+                onDoubleClick={() => {
+                  setEditingLocationValue(localLocation);
+                  setIsEditingLocation(true);
+                }}
+                title="Double click to edit location"
+                style={{ cursor: "pointer" }}
+              >
+                <MapPin size={12} />
+                <span>{localLocation.toUpperCase()}</span>
+              </div>
+            )}
           </div>
           <p>{boardDetails?.description || "Collaborative co-op trip space"}</p>
         </div>
@@ -1011,6 +1186,98 @@ export const KanbanBoard: React.FC = () => {
             ) : null}
           </DragOverlay>
         </DndContext>
+
+        {/* Floating Canvas Zoom/Pan Controls */}
+        <div 
+          style={{
+            position: "absolute",
+            bottom: 24,
+            left: 24,
+            display: "flex",
+            gap: 8,
+            background: "var(--glass-bg)",
+            border: "1px solid var(--glass-border)",
+            padding: 6,
+            borderRadius: 12,
+            boxShadow: "var(--glass-shadow)",
+            backdropFilter: "blur(10px)",
+            zIndex: 30,
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <button
+            className="canvas-control-btn"
+            onClick={() => setZoom((z) => Math.min(2, z + 0.1))}
+            title="Zoom In"
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "var(--text-muted)",
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: "pointer",
+              width: 28,
+              height: 28,
+              borderRadius: 8,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "all 0.2s"
+            }}
+          >
+            +
+          </button>
+          <div style={{ alignSelf: "center", fontSize: 11, fontWeight: 700, minWidth: 40, textAlign: "center", color: "var(--text-muted)" }}>
+            {Math.round(zoom * 100)}%
+          </div>
+          <button
+            className="canvas-control-btn"
+            onClick={() => setZoom((z) => Math.max(0.4, z - 0.1))}
+            title="Zoom Out"
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "var(--text-muted)",
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: "pointer",
+              width: 28,
+              height: 28,
+              borderRadius: 8,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "all 0.2s"
+            }}
+          >
+            -
+          </button>
+          <div style={{ width: 1, backgroundColor: "var(--border-color)", margin: "4px 2px" }} />
+          <button
+            className="canvas-control-btn"
+            onClick={() => {
+              setPan({ x: 0, y: 0 });
+              setZoom(1);
+            }}
+            title="Focus on Day 1"
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "var(--text-muted)",
+              cursor: "pointer",
+              width: 28,
+              height: 28,
+              borderRadius: 8,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "all 0.2s"
+            }}
+          >
+            <Crosshair size={14} />
+          </button>
+        </div>
       </div>
 
       {/* Task Edit Modal Overlay */}
@@ -1175,6 +1442,42 @@ export const KanbanBoard: React.FC = () => {
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {confirmDialog && confirmDialog.isOpen && (
+        <div className="modal-backdrop" onClick={() => setConfirmDialog(null)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
+            <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 12, color: "var(--text-main)" }}>{confirmDialog.title}</h2>
+            <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 24, lineHeight: 1.5 }}>
+              {confirmDialog.message}
+            </p>
+            <div className="modal-actions" style={{ marginTop: 0 }}>
+              <button
+                className="modal-btn btn-secondary"
+                onClick={() => setConfirmDialog(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="modal-btn btn-primary"
+                style={{ backgroundColor: "#ef4444", color: "#fff" }}
+                onClick={() => {
+                  confirmDialog.onConfirm();
+                  setConfirmDialog(null);
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className={`custom-toast ${toast.type}`}>
+          {toast.type === "success" ? <CheckCircle2 size={16} style={{ color: "#10b981" }} /> : <AlertCircle size={16} style={{ color: "#ef4444" }} />}
+          <div style={{ fontSize: 13, fontWeight: 500 }}>{toast.message}</div>
         </div>
       )}
     </div>

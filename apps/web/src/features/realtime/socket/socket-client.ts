@@ -8,7 +8,7 @@ export function getSocket(token: string): Socket<ServerToClientEvents, ClientToS
     const currentToken = (socket.auth as any)?.token;
       
     if (currentToken !== token) {
-      console.log("🔄 Socket token changed. Reconnecting socket...");
+      console.log("Socket token changed. Reconnecting socket...");
       socket.disconnect();
       socket = null;
     }
@@ -28,7 +28,7 @@ export function getSocket(token: string): Socket<ServerToClientEvents, ClientToS
 
 export function disconnectSocket(): void {
   if (socket) {
-    console.log("🔌 Disconnecting Socket...");
+    console.log("Disconnecting Socket...");
     socket.disconnect();
     socket = null;
   }

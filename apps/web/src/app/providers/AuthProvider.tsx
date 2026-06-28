@@ -43,7 +43,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(meRes.data?.data);
       }
     } catch (err) {
-      console.warn("⚠️ No active session found on boot.");
+      console.warn("No active session found on boot.");
       if (!getAccessToken()) {
         updateAccessToken(null);
         setUser(null);
@@ -65,7 +65,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw new Error("OAuth redirect URL is missing in server response");
       }
     } catch (err) {
-      console.error("❌ Failed to initiate Google login redirection:", err);
+      console.error("Failed to initiate Google login redirection:", err);
       setLoading(false);
     }
   };
@@ -75,7 +75,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(true);
       await httpClient.post("/auth/logout");
     } catch (err) {
-      console.error("❌ Logout request failed:", err);
+      console.error("Failed to logout request:", err);
     } finally {
       updateAccessToken(null);
       setUser(null);

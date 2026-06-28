@@ -36,7 +36,7 @@ export const DashboardLayout: React.FC = () => {
       const res = await httpClient.get("/workspaces");
       setWorkspaces(res.data?.data || []);
     } catch (err) {
-      console.error("❌ Failed to fetch user workspaces:", err);
+      console.error("Failed to fetch user workspaces:", err);
     } finally {
       setLoading(false);
     }
@@ -53,7 +53,7 @@ export const DashboardLayout: React.FC = () => {
       setShowNewWorkspaceModal(false);
       await fetchWorkspaces();
     } catch (err) {
-      console.error("❌ Failed to create workspace:", err);
+      console.error("Failed to create workspace:", err);
     } finally {
       setCreateLoading(false);
     }

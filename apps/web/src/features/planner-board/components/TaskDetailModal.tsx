@@ -84,7 +84,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       const res = await httpClient.get(`/items/${taskId}/comments`, { params: { planId } });
       setComments(res.data?.data || []);
     } catch (err) {
-      console.error("❌ Failed to fetch comments:", err);
+      console.error("Failed to fetch comments:", err);
     } finally {
       setCommentsLoading(false);
     }
@@ -96,7 +96,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       const res = await httpClient.get(`/items/${taskId}/media`, { params: { planId } });
       setMedia(res.data?.data || []);
     } catch (err) {
-      console.error("❌ Failed to fetch media:", err);
+      console.error("Failed to fetch media:", err);
     } finally {
       setMediaLoading(false);
     }
@@ -172,7 +172,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       setNewComment("");
       await fetchComments();
     } catch (err) {
-      console.error("❌ Failed to add comment:", err);
+      console.error("Failed to add comment:", err);
     }
   };
 
@@ -181,7 +181,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       await httpClient.delete(`/comments/${commentId}`, { params: { planId } });
       await fetchComments();
     } catch (err) {
-      console.error("❌ Failed to delete comment:", err);
+      console.error("Failed to delete comment:", err);
     }
   };
 
@@ -200,7 +200,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       setMockFileUrl("");
       await fetchMedia();
     } catch (err) {
-      console.error("❌ Failed to add media attachment:", err);
+      console.error("Failed to add media attachment:", err);
     }
   };
 
@@ -209,7 +209,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       await httpClient.delete(`/media/${mediaId}`, { params: { planId } });
       await fetchMedia();
     } catch (err) {
-      console.error("❌ Failed to delete media attachment:", err);
+      console.error("Failed to delete media attachment:", err);
     }
   };
 

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { httpClient } from "../../../shared/api/http-client.js";
 import { WorkspaceDto, PlanDto } from "@collab-planner/shared";
-import { Folder, Plus, FileText, ChevronRight, UserPlus, Trash2, Edit2 } from "lucide-react";
+import { Folder, Plus, FileText, ChevronRight, UserPlus, Trash2, Edit2, CheckCircle2, AlertCircle } from "lucide-react";
 import { Spinner } from "../../../shared/ui/spinner/Spinner.js";
 
 interface WorkspaceWithPlans extends WorkspaceDto {
@@ -34,6 +34,22 @@ export const WorkspaceListPage: React.FC = () => {
   const [editingWorkspaceName, setEditingWorkspaceName] = useState("");
   const [editLoading, setEditLoading] = useState(false);
 
+  // Toast state
+  const [toast, setToast] = useState<{
+    message: string;
+    type: "success" | "error" | "info";
+  } | null>(null);
+
+  const showToast = (message: string, type: "success" | "error" | "info" = "info") => {
+    setToast({ message, type });
+  };
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
   const fetchWorkspacesAndPlans = async () => {
     try {
       const res = await httpClient.get("/workspaces");
@@ -63,7 +79,7 @@ export const WorkspaceListPage: React.FC = () => {
               return updated;
             });
           } catch (err) {
-            console.error(`❌ Failed to fetch plans for workspace ${ws.id}:`, err);
+            console.error(`Failed to fetch plans for workspace ${ws.id}:`, err);
             setWorkspaces(prev => {
               const updated = [...prev];
               updated[index] = { ...updated[index], loadingPlans: false };
@@ -73,7 +89,7 @@ export const WorkspaceListPage: React.FC = () => {
         })
       );
     } catch (err) {
-      console.error("❌ Failed to load workspaces:", err);
+      console.error("Failed to load workspaces:", err);
       setLoading(false);
     }
   };
@@ -96,7 +112,7 @@ export const WorkspaceListPage: React.FC = () => {
       // Reload everything
       await fetchWorkspacesAndPlans();
     } catch (err) {
-      console.error("❌ Failed to create plan board:", err);
+      console.error("Failed to create plan board:", err);
     } finally {
       setCreateLoading(false);
     }
@@ -115,11 +131,11 @@ export const WorkspaceListPage: React.FC = () => {
       
       setInviteEmail("");
       setShowInviteModal(false);
-      alert("✅ Invitation sent successfully!");
+      showToast("Invitation sent successfully!", "success");
       await fetchWorkspacesAndPlans();
     } catch (err: any) {
-      console.error("❌ Failed to invite member:", err);
-      alert(`❌ Failed to invite: ${err.response?.data?.error?.message || err.message}`);
+      console.error("Failed to invite member:", err);
+      showToast("Failed to invite: " + (err.response?.data?.error?.message || err.message), "error");
     } finally {
       setInviteLoading(false);
     }
@@ -142,8 +158,8 @@ export const WorkspaceListPage: React.FC = () => {
       // Reload workspaces
       await fetchWorkspacesAndPlans();
     } catch (err: any) {
-      console.error("❌ Failed to update workspace:", err);
-      alert(`❌ Failed to update workspace: ${err.response?.data?.error?.message || err.message}`);
+      console.error("Failed to update workspace:", err);
+      showToast("Failed to update workspace: " + (err.response?.data?.error?.message || err.message), "error");
     } finally {
       setEditLoading(false);
     }
@@ -380,6 +396,13 @@ export const WorkspaceListPage: React.FC = () => {
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className={`custom-toast ${toast.type}`}>
+          {toast.type === "success" ? <CheckCircle2 size={16} style={{ color: "#10b981" }} /> : <AlertCircle size={16} style={{ color: "#ef4444" }} />}
+          <div style={{ fontSize: 13, fontWeight: 500 }}>{toast.message}</div>
         </div>
       )}
     </div>
