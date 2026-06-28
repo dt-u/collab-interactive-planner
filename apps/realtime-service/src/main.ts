@@ -21,11 +21,11 @@ async function bootstrap() {
   const mongoUri = environmentConfig.MONGO_URI;
 
   mongoose.connection.on("connected", () => {
-    console.log("🍃 MongoDB connected successfully inside realtime-service");
+    console.log("MongoDB connected successfully inside realtime-service");
   });
 
   mongoose.connection.on("error", (err) => {
-    console.error("❌ MongoDB connection error in realtime-service:", err);
+    console.error("MongoDB connection error in realtime-service:", err);
   });
 
   try {
@@ -36,17 +36,17 @@ async function bootstrap() {
     compactionInterval = startCompactionScheduler(60000);
 
     server.listen(port, "0.0.0.0", () => {
-      console.log(`🚀 realtime-service is listening on 0.0.0.0:${port}`);
+      console.log(`realtime-service is listening on 0.0.0.0:${port}`);
     });
   } catch (err) {
-    console.error("❌ Bootstrap failed:", err);
+    console.error("Bootstrap failed:", err);
     process.exit(1);
   }
 }
 
 // 4. Graceful Shutdown
 async function shutdown(signal: string) {
-  console.log(`\n⚠️ Received ${signal}. Shutting down gracefully...`);
+  console.log(`\nReceived ${signal}. Shutting down gracefully...`);
   
   if (compactionInterval) {
     clearInterval(compactionInterval);

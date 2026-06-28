@@ -28,7 +28,7 @@ export async function withTransaction<T>(
       error?.codeName === "IllegalOperation";
 
     if (isStandaloneError) {
-      console.warn("⚠️ Standalone MongoDB detected. Falling back to executing operation without a transaction.");
+      console.warn("Standalone MongoDB detected. Falling back to executing operation without a transaction.");
       return await fn(undefined);
     }
 

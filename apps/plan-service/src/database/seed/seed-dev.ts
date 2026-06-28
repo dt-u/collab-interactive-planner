@@ -7,25 +7,25 @@ import { PlannerItemModel } from "../../modules/planner-items/planner-item.model
 import { seedDatabase } from "./seed.js";
 
 async function runDevSeed(): Promise<void> {
-  console.log("🚀 Running Developer Mock Data Seeding...");
+  console.log("Running Developer Mock Data Seeding...");
   const mongoUri = environmentConfig.MONGO_URI;
 
   try {
     await mongoose.connect(mongoUri);
-    console.log("🍃 Connected to MongoDB for seeding.");
+    console.log("Connected to MongoDB for seeding.");
 
     // Run system metadata seeding first to ensure default role mappings exist
     await seedDatabase();
 
     // 1. Clear existing domain collections
-    console.log("🧹 Clearing users, workspaces, plans, and tasks...");
+    console.log("Clearing users, workspaces, plans, and tasks...");
     await UserModel.deleteMany({});
     await WorkspaceModel.deleteMany({});
     await PlanModel.deleteMany({});
     await PlannerItemModel.deleteMany({});
 
     // 2. Seed Mock Users
-    console.log("👤 Seeding mock users...");
+    console.log("Seeding mock users...");
     const users = await UserModel.insertMany([
       {
         email: "john@example.com",
@@ -155,12 +155,12 @@ async function runDevSeed(): Promise<void> {
       },
     ]);
 
-    console.log("🎉 Seeding completed successfully!");
+    console.log("Seeding completed successfully!");
   } catch (error) {
-    console.error("❌ Seeding failed with error:", error);
+    console.error("Seeding failed with error:", error);
   } finally {
     await mongoose.disconnect();
-    console.log("🍃 Disconnected from MongoDB.");
+    console.log("Disconnected from MongoDB.");
   }
 }
 

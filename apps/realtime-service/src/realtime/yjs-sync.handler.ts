@@ -36,7 +36,7 @@ export async function hydrateDocument(docId: string, doc: Y.Doc): Promise<void> 
   // If the document has no snapshot and no deltas, it is completely new.
   // Initialize with exactly 3 default days and 1 default task card as requested by the user.
   if (!snapshot && deltas.length === 0) {
-    console.log(`🌱 Initializing default workspace days and item for new Y.Doc: ${docId}`);
+    console.log(`Initializing default workspace days and item for new Y.Doc: ${docId}`);
     doc.transact(() => {
       const orderArray = doc.getArray("columnOrder");
       const metadataMap = doc.getMap("columnMetadata");
@@ -75,7 +75,7 @@ export async function hydrateDocument(docId: string, doc: Y.Doc): Promise<void> 
     await YjsPersistenceRepository.appendUpdate(docId, Buffer.from(stateUpdate));
   }
 
-  console.log(`💧 Hydrated Y.Doc ${docId}: Snapshot version ${snapshot?.version || 0}, applied ${deltas.length} delta updates.`);
+  console.log(`Hydrated Y.Doc ${docId}: Snapshot version ${snapshot?.version || 0}, applied ${deltas.length} delta updates.`);
 }
 
 /**
@@ -120,7 +120,7 @@ export function registerYjsSyncHandlers(socket: Socket, realtimeServer: Realtime
 
       // Ensure user is actually in this socket room
       if (!socket.rooms.has(roomName)) {
-        console.warn(`⚠️ Socket ${socket.id} tried to sync doc ${docId} without joining room`);
+        console.warn(`Socket ${socket.id} tried to sync doc ${docId} without joining room`);
         return;
       }
 
@@ -150,7 +150,7 @@ export function registerYjsSyncHandlers(socket: Socket, realtimeServer: Realtime
         }
       }
     } catch (err) {
-      console.error(`❌ Sync Step 1 error on socket ${socket.id}:`, err);
+      console.error(`Sync Step 1 error on socket ${socket.id}:`, err);
     }
   });
 
@@ -187,7 +187,7 @@ export function registerYjsSyncHandlers(socket: Socket, realtimeServer: Realtime
         await pubClient.publish("yjs:cluster-updates", msg);
       }
     } catch (err) {
-      console.error(`❌ Sync Step 2 error on socket ${socket.id}:`, err);
+      console.error(`Sync Step 2 error on socket ${socket.id}:`, err);
     }
   });
 
@@ -224,7 +224,7 @@ export function registerYjsSyncHandlers(socket: Socket, realtimeServer: Realtime
         await pubClient.publish("yjs:cluster-updates", msg);
       }
     } catch (err) {
-      console.error(`❌ Yjs update error on socket ${socket.id}:`, err);
+      console.error(`Yjs update error on socket ${socket.id}:`, err);
     }
   });
 
@@ -269,7 +269,7 @@ export async function initializeClusterSync(redisSub: any): Promise<void> {
         });
       }
     } catch (err) {
-      console.error("❌ Error processing cluster update message:", err);
+      console.error("Error processing cluster update message:", err);
     }
   });
 }

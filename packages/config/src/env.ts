@@ -41,7 +41,7 @@ export function loadEnvironmentConfig(
 
   if (!result.success) {
     console.error(
-      "❌ Invalid environment variables:",
+      "Invalid environment variables:",
       JSON.stringify(result.error.format(), null, 2),
     );
     throw new Error("Invalid environment configuration");

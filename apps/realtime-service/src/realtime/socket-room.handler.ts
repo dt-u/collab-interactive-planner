@@ -32,7 +32,7 @@ export async function broadcastPresence(io: RealtimeServer, roomName: string, ex
 export function registerRoomHandlers(socket: Socket, io: RealtimeServer): void {
   const user = socket.data.user;
   if (!user) {
-    console.error(`❌ SocketRoomHandler: socket.data.user is missing for socket: ${socket.id}`);
+    console.error(`SocketRoomHandler: socket.data.user is missing for socket: ${socket.id}`);
     return;
   }
 
@@ -40,18 +40,18 @@ export function registerRoomHandlers(socket: Socket, io: RealtimeServer): void {
     try {
       const { workspaceId, planId } = payload;
       
-      console.log(`🔌 Socket ${socket.id} (User: ${user.email}) requesting to join plan: ${planId} in workspace: ${workspaceId}`);
+      console.log(`Socket ${socket.id} (User: ${user.email}) requesting to join plan: ${planId} in workspace: ${workspaceId}`);
 
       // 1. Verify Plan exists and belongs to the workspace
       const plan = await PlanModel.findById(planId);
       if (!plan) {
-        console.warn(`⚠️ Room join failed: Plan ${planId} not found`);
+        console.warn(`Room join failed: Plan ${planId} not found`);
         callback?.({ success: false, error: "Plan not found" });
         return;
       }
 
       if (plan.workspaceId.toString() !== workspaceId) {
-        console.warn(`⚠️ Room join failed: Plan ${planId} does not belong to workspace ${workspaceId}`);
+        console.warn(`Room join failed: Plan ${planId} does not belong to workspace ${workspaceId}`);
         callback?.({ success: false, error: "Unauthorized workspace plan combination" });
         return;
       }
@@ -59,7 +59,7 @@ export function registerRoomHandlers(socket: Socket, io: RealtimeServer): void {
       // 2. Verify Workspace exists and user is a member/owner
       const workspace = await WorkspaceModel.findById(workspaceId);
       if (!workspace) {
-        console.warn(`⚠️ Room join failed: Workspace ${workspaceId} not found`);
+        console.warn(`Room join failed: Workspace ${workspaceId} not found`);
         callback?.({ success: false, error: "Workspace not found" });
         return;
       }
@@ -69,7 +69,7 @@ export function registerRoomHandlers(socket: Socket, io: RealtimeServer): void {
         workspace.members.some(m => m.userId.toString() === user.userId);
 
       if (!isMember) {
-        console.warn(`⚠️ Room join failed: User ${user.email} is not a member of workspace ${workspaceId}`);
+        console.warn(`Room join failed: User ${user.email} is not a member of workspace ${workspaceId}`);
         callback?.({ success: false, error: "UNAUTHORIZED: You do not have access to this workspace" });
         return;
       }
@@ -78,7 +78,7 @@ export function registerRoomHandlers(socket: Socket, io: RealtimeServer): void {
 
       // Join the Socket.IO channel
       await socket.join(roomName);
-      console.log(`✅ Socket ${socket.id} successfully joined room: ${roomName}`);
+      console.log(`Socket ${socket.id} successfully joined room: ${roomName}`);
 
       // Broadcast join event to others
       socket.to(roomName).emit("room:member-joined", {
@@ -91,7 +91,7 @@ export function registerRoomHandlers(socket: Socket, io: RealtimeServer): void {
 
       callback?.({ success: true });
     } catch (err: any) {
-      console.error(`❌ Room join error on socket ${socket.id}:`, err);
+      console.error(`Room join error on socket ${socket.id}:`, err);
       callback?.({ success: false, error: "Internal server error during room join" });
     }
   });
@@ -100,7 +100,7 @@ export function registerRoomHandlers(socket: Socket, io: RealtimeServer): void {
     const { planId } = payload;
     const roomName = `plan:${planId}`;
     
-    console.log(`🔌 Socket ${socket.id} leaving room: ${roomName}`);
+    console.log(`Socket ${socket.id} leaving room: ${roomName}`);
     
     // Broadcast member left to others before leaving
     socket.to(roomName).emit("room:member-left", { userId: user.userId });
@@ -115,14 +115,14 @@ export function registerRoomHandlers(socket: Socket, io: RealtimeServer): void {
   socket.on("disconnecting", () => {
     for (const roomName of socket.rooms) {
       if (roomName.startsWith("plan:")) {
-        console.log(`🔌 Socket ${socket.id} disconnecting from room: ${roomName}`);
+        console.log(`Socket ${socket.id} disconnecting from room: ${roomName}`);
         
         // Notify other clients that this user left
         socket.to(roomName).emit("room:member-left", { userId: user.userId });
         
         // Broadcast presence update excluding this socket ID
         broadcastPresence(io, roomName, socket.id).catch(err => {
-          console.error(`❌ Error broadcasting presence on disconnect to room ${roomName}:`, err);
+          console.error(`Error broadcasting presence on disconnect to room ${roomName}:`, err);
         });
       }
     }

@@ -16,24 +16,24 @@ export const PermissionModel =
   mongoose.models.Permission || mongoose.model("Permission", PermissionSchema);
 
 export async function seedDatabase(): Promise<void> {
-  console.log("🌱 Checking system metadata seeding status...");
+  console.log("Checking system metadata seeding status...");
 
   // 1. Seed Categories
   const categoryCount = await CategoryModel.countDocuments();
   if (categoryCount === 0) {
-    console.log("🚀 Seeding default task categories...");
+    console.log("Seeding default task categories...");
     await CategoryModel.insertMany([
       { name: "To Do", code: "todo", color: "#FF5733" },
       { name: "In Progress", code: "in_progress", color: "#FFA833" },
       { name: "Done", code: "done", color: "#33FF57" },
     ]);
-    console.log("✅ Default task categories seeded.");
+    console.log("Default task categories seeded.");
   }
 
   // 2. Seed Role-Permission Mappings
   const permissionCount = await PermissionModel.countDocuments();
   if (permissionCount === 0) {
-    console.log("🚀 Seeding default role-permission mappings...");
+    console.log("Seeding default role-permission mappings...");
     await PermissionModel.insertMany([
       {
         role: "owner",
@@ -81,6 +81,6 @@ export async function seedDatabase(): Promise<void> {
         ],
       },
     ]);
-    console.log("✅ Role-permission mappings seeded.");
+    console.log("Role-permission mappings seeded.");
   }
 }

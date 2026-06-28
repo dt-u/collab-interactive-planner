@@ -10,7 +10,7 @@ import { pubClient } from "./server.js";
  */
 export async function compactDocument(docId: string): Promise<boolean> {
   if (!pubClient) {
-    console.warn("⚠️ Redis client is not initialized. Skipping compaction for:", docId);
+    console.warn("Redis client is not initialized. Skipping compaction for:", docId);
     return false;
   }
 
@@ -27,7 +27,7 @@ export async function compactDocument(docId: string): Promise<boolean> {
   }
 
   try {
-    console.log(`📦 [Compaction] Lock acquired for document ${docId}. Starting compaction...`);
+    console.log(`[Compaction] Lock acquired for document ${docId}. Starting compaction...`);
 
     // 2. Fetch baseline snapshot
     const snapshot = await YjsPersistenceRepository.getSnapshot(docId);
@@ -44,7 +44,7 @@ export async function compactDocument(docId: string): Promise<boolean> {
     // 3. Fetch incremental updates since the snapshot
     const deltas = await YjsPersistenceRepository.getUpdates(docId, since);
     if (deltas.length === 0) {
-      console.log(`📦 [Compaction] No new updates to compact for ${docId}`);
+      console.log(`[Compaction] No new updates to compact for ${docId}`);
       await releaseLock(lockKey, lockToken);
       return true;
     }
@@ -62,15 +62,15 @@ export async function compactDocument(docId: string): Promise<boolean> {
 
     // 7. Save consolidated snapshot to MongoDB
     await YjsPersistenceRepository.saveSnapshot(docId, compactedState, version);
-    console.log(`📦 [Compaction] Consolidated snapshot saved for ${docId} (Version: ${version})`);
+    console.log(`[Compaction] Consolidated snapshot saved for ${docId} (Version: ${version})`);
 
     // 8. Delete compacted log records using a strict timestamp boundary
     const deletedCount = await YjsPersistenceRepository.deleteUpdates(docId, maxTimestamp);
-    console.log(`📦 [Compaction] Purged ${deletedCount} compacted log entries for ${docId}`);
+    console.log(`[Compaction] Purged ${deletedCount} compacted log entries for ${docId}`);
 
     return true;
   } catch (err) {
-    console.error(`❌ [Compaction] Error during compaction for document ${docId}:`, err);
+    console.error(`[Compaction] Error during compaction for document ${docId}:`, err);
     return false;
   } finally {
     await releaseLock(lockKey, lockToken);
@@ -86,10 +86,10 @@ async function releaseLock(lockKey: string, lockToken: string): Promise<void> {
     const currentValue = await pubClient.get(lockKey);
     if (currentValue === lockToken) {
       await pubClient.del(lockKey);
-      console.log(`📦 [Compaction] Lock released for key: ${lockKey}`);
+      console.log(`[Compaction] Lock released for key: ${lockKey}`);
     }
   } catch (err) {
-    console.error(`❌ [Compaction] Failed to release Redis lock:`, err);
+    console.error(`[Compaction] Failed to release Redis lock:`, err);
   }
 }
 

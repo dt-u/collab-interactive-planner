@@ -44,25 +44,25 @@ export function createRealtimeServer(httpServer: http.Server): RealtimeServer {
 
   const redisUri = environmentConfig.REDIS_URI;
   if (redisUri) {
-    console.log(`🔌 Initializing Redis Pub/Sub adapter at: ${redisUri}`);
+    console.log(`Initializing Redis Pub/Sub adapter at: ${redisUri}`);
     pubClient = new Redis(redisUri, {
       maxRetriesPerRequest: null,
     });
     subClient = pubClient.duplicate();
 
     pubClient.on("error", (err: any) => {
-      console.error("❌ Redis PubClient Error:", err);
+      console.error("Redis PubClient Error:", err);
     });
 
     subClient.on("error", (err: any) => {
-      console.error("❌ Redis SubClient Error:", err);
+      console.error("Redis SubClient Error:", err);
     });
 
     io.adapter(createAdapter(pubClient, subClient));
 
     // Initialize cluster sync pub/sub subscription
     initializeClusterSync(subClient).catch(err => {
-      console.error("❌ Failed to initialize cluster sync subscription:", err);
+      console.error("Failed to initialize cluster sync subscription:", err);
     });
   }
 

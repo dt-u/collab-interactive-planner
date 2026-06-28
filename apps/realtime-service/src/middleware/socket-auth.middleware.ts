@@ -11,7 +11,7 @@ export function socketAuthMiddleware(
     socket.handshake.query?.token;
 
   if (!token) {
-    console.warn(`⚠️ Connection rejected: No token provided on socket ${socket.id}`);
+    console.warn(`Connection rejected: No token provided on socket ${socket.id}`);
     next(new Error("UNAUTHORIZED: No authentication token provided"));
     return;
   }
@@ -35,10 +35,10 @@ export function socketAuthMiddleware(
       name: decoded.name,
     };
 
-    console.log(`👤 Socket ${socket.id} authenticated successfully as user: ${decoded.email}`);
+    console.log(`Socket ${socket.id} authenticated successfully as user: ${decoded.email}`);
     next();
   } catch (error) {
-    console.warn(`⚠️ Connection rejected: Invalid token on socket ${socket.id}`, error);
+    console.warn(`Connection rejected: Invalid token on socket ${socket.id}`, error);
     next(new Error("UNAUTHORIZED: Invalid or expired token"));
   }
 }
