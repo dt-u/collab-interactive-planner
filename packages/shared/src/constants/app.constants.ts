@@ -1,4 +1,4 @@
-export const APP_NAME = "Collaborative Interactive Planner";
+export const APP_NAME = "PACKUP";
 export const MIN_PASSWORD_LENGTH = 8;
 export const DEFAULT_PAGE_LIMIT = 10;
 
