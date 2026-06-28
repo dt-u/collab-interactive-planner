@@ -11,7 +11,7 @@ export class YjsDocumentRegistry {
     if (!doc) {
       doc = new Y.Doc();
       this.docs.set(docId, doc);
-      console.log(`📂 Initialized Y.Doc in-memory instance for: ${docId}`);
+      console.log(`Initialized Y.Doc in-memory instance for: ${docId}`);
     }
     return doc;
   }

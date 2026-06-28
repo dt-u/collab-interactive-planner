@@ -16,7 +16,7 @@ async function testRealtimeSync() {
     // 1. Find John Doe
     const john = await UserModel.findOne({ email: "john@example.com" });
     if (!john) {
-      console.log("❌ Mock user 'john@example.com' not found. Run pnpm --filter @collab-planner/plan-service db:seed first!");
+      console.log("Mock user 'john@example.com' not found. Run pnpm --filter @collab-planner/plan-service db:seed first!");
       process.exit(1);
     }
 
@@ -28,14 +28,14 @@ async function testRealtimeSync() {
       ]
     });
     if (!workspace) {
-      console.log(`❌ Workspace not found for user ${john.email}. Run seeding!`);
+      console.log(`Workspace not found for user ${john.email}. Run seeding!`);
       process.exit(1);
     }
 
     // 3. Find a plan in this workspace
     const plan = await PlanModel.findOne({ workspaceId: workspace._id });
     if (!plan) {
-      console.log(`❌ Plan board not found in workspace ${workspace.name}. Run seeding!`);
+      console.log(`Plan board not found in workspace ${workspace.name}. Run seeding!`);
       process.exit(1);
     }
 
@@ -50,71 +50,71 @@ async function testRealtimeSync() {
     const workspaceId = workspace._id.toString();
     const planId = plan._id.toString();
 
-    console.log(`✅ Test details loaded successfully:`);
+    console.log(`Test details loaded successfully:`);
     console.log(`   - User: ${john.name} (${john.email})`);
     console.log(`   - Workspace: ${workspace.name} (ID: ${workspaceId})`);
     console.log(`   - Plan Board: ${plan.name} (ID: ${planId})`);
-    
+
     // Disconnect Mongoose to let the process stay alive for Socket.IO testing
     await mongoose.disconnect();
 
     // 5. Connect Socket.IO client directly to realtime-service port 3002
-    console.log("\n🔌 Connecting Socket.IO client to http://localhost:3002...");
+    console.log("\nConnecting Socket.IO client to http://localhost:3002...");
     const socket = ClientSocket("http://localhost:3002", {
       auth: { token },
       transports: ["websocket"]
     });
 
     socket.on("connect", () => {
-      console.log(`✅ Socket connected! ID: ${socket.id}`);
+      console.log(`Socket connected! ID: ${socket.id}`);
 
       // 6. Join collaborative board room
-      console.log("➡️ Emitting 'room:join'...");
+      console.log("Emitting 'room:join'...");
       socket.emit("room:join", { workspaceId, planId }, (res: any) => {
-        console.log(`📥 Received join acknowledgement:`, res);
-        
+        console.log(`Received join acknowledgement:`, res);
+
         if (res.success) {
-          console.log("🎉 Successfully joined the board room!");
+          console.log("Successfully joined the board room!");
         } else {
-          console.error("❌ Failed to join room:", res.error);
+          console.error("Failed to join room:", res.error);
           socket.disconnect();
         }
       });
     });
 
     socket.on("connect_error", (err) => {
-      console.error("❌ Socket connection error:", err.message);
+      console.error("Socket connection error:", err.message);
     });
 
     socket.on("disconnect", (reason) => {
-      console.log(`🔌 Socket disconnected. Reason: ${reason}`);
+      console.log(`Socket disconnected. Reason: ${reason}`);
     });
 
     // 7. Handle Room presence list updates
     socket.on("room:presence-update", (activeUsers) => {
-      console.log("👥 Active users in room updated:");
+      console.log("Active users in room updated:");
       console.table(activeUsers);
     });
 
     socket.on("room:member-joined", (member) => {
-      console.log(`👋 User joined: ${member.name} (ID: ${member.userId})`);
+      console.log(`User joined: ${member.name} (ID: ${member.userId})`);
     });
 
     socket.on("room:member-left", (member) => {
-      console.log(`🚪 User left (ID: ${member.userId})`);
+      console.log(`User left (ID: ${member.userId})`);
     });
 
     // 8. Handle Yjs Sync steps
     socket.on("yjs:sync-step-1", (syncStep1Payload) => {
-      console.log(`📥 Received YJS Sync Step 1 (Server state vector)`);
-      
+      console.log(`Received YJS Sync Step 1 (Server state vector)`);
+
       const serverSV = new Uint8Array(syncStep1Payload.stateVector);
       console.log(`   - Server State Vector byte length: ${serverSV.byteLength}`);
 
       // Create a dummy client doc and encode missing changes
       const clientDoc = new Y.Doc();
       const sharedItems = clientDoc.getMap("items");
-      
+
       // Mutate the local doc
       const testTaskId = `task-${Math.random().toString(36).substring(7)}`;
       sharedItems.set(testTaskId, {
@@ -124,7 +124,7 @@ async function testRealtimeSync() {
 
       // Calculate state update since the server vector
       const clientUpdate = Y.encodeStateAsUpdate(clientDoc, serverSV);
-      console.log(`📤 Sending Client Update (Sync Step 2) with byte length: ${clientUpdate.byteLength}`);
+      console.log(`Sending Client Update (Sync Step 2) with byte length: ${clientUpdate.byteLength}`);
 
       // Send the update vector
       socket.emit("yjs:sync-step-2", {
@@ -134,26 +134,26 @@ async function testRealtimeSync() {
     });
 
     socket.on("yjs:sync-step-2", (syncStep2Payload) => {
-      console.log(`📥 Received YJS Sync Step 2 (Server missing updates)`);
+      console.log(`Received YJS Sync Step 2 (Server missing updates)`);
       const serverUpdate = new Uint8Array(syncStep2Payload.update);
       console.log(`   - Server Update byte length: ${serverUpdate.byteLength}`);
     });
 
     socket.on("yjs:update", (updatePayload) => {
       const updateBuffer = new Uint8Array(updatePayload.update);
-      console.log(`📥 Received Broadcasted 'yjs:update' of size: ${updateBuffer.byteLength} bytes.`);
+      console.log(`Received Broadcasted 'yjs:update' of size: ${updateBuffer.byteLength} bytes.`);
     });
 
     // Automatically clean up and exit after 10 seconds
     setTimeout(() => {
-      console.log("\n⏱️ 10 seconds elapsed. Cleaning up connection...");
+      console.log("\n10 seconds elapsed. Cleaning up connection...");
       socket.disconnect();
-      console.log("🏁 Test completed successfully!");
+      console.log("Test completed successfully!");
       process.exit(0);
     }, 10000);
 
   } catch (error) {
-    console.error("❌ Test script run failed:", error);
+    console.error("Test script run failed:", error);
     await mongoose.disconnect();
     process.exit(1);
   }

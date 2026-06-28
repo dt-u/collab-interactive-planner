@@ -7,11 +7,11 @@ async function generateDevToken() {
   const uri = environmentConfig.MONGO_URI;
   try {
     await mongoose.connect(uri);
-    
+
     // Find John Doe
     const john = await UserModel.findOne({ email: "john@example.com" });
     if (!john) {
-      console.log("❌ Mock user 'john@example.com' not found. Run db:seed first!");
+      console.log("Mock user 'john@example.com' not found. Run db:seed first!");
       return;
     }
 
@@ -26,12 +26,12 @@ async function generateDevToken() {
       expiresIn: "7d",
     });
 
-    console.log("\n🔑 --- DEVELOPER TEST TOKENS ---");
+    console.log("\n--- DEVELOPER TEST TOKENS ---");
     console.log(`User: ${john.name} (${john.email})`);
     console.log(`User ID: ${john._id.toString()}`);
     console.log(`Access Token:\n\n${token}\n`);
-    
-    console.log("🚀 --- SAMPLE HTTP REQUESTS FOR POSTMAN/CURL ---");
+
+    console.log("--- SAMPLE HTTP REQUESTS FOR POSTMAN/CURL ---");
     console.log(`1. Get workspaces of John:
    GET http://localhost/api/workspaces
    Headers: Authorization: Bearer ${token}
@@ -40,9 +40,9 @@ async function generateDevToken() {
     console.log("2. Use the returned Workspace ID to fetch its boards:");
     console.log("   GET http://localhost/api/workspaces/<WORKSPACE_ID>/plans");
     console.log(`   Headers: Authorization: Bearer ${token}\n`);
-    
+
   } catch (error) {
-    console.error("❌ Error generating dev token:", error);
+    console.error("Error generating dev token:", error);
   } finally {
     await mongoose.disconnect();
   }

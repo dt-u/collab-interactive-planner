@@ -9,6 +9,7 @@ import {
 import { documentRegistry } from "../yjs-document-registry.js";
 import { YjsPersistenceRepository } from "../yjs-persistence.repository.js";
 import { RealtimeServer, pubClient, io } from "../server.js";
+import { PlanModel } from "../models/plan.model.js";
 
 // Tracks concurrent database hydrations to avoid duplicate queries
 const pendingHydrations = new Map<string, Promise<void>>();
@@ -37,7 +38,23 @@ export async function hydrateDocument(docId: string, doc: Y.Doc): Promise<void> 
   // Initialize with exactly 3 default days and 1 default task card as requested by the user.
   if (!snapshot && deltas.length === 0) {
     console.log(`Initializing default workspace days and item for new Y.Doc: ${docId}`);
+    
+    // Fetch plan details from database to initialize boardInfo name
+    let planName = "My Plan Board";
+    try {
+      const plan = await PlanModel.findById(docId);
+      if (plan) {
+        planName = plan.name;
+      }
+    } catch (dbErr) {
+      console.error(`Failed to fetch plan details for initial YDoc hydration:`, dbErr);
+    }
+
     doc.transact(() => {
+      const boardInfoMap = doc.getMap("boardInfo");
+      boardInfoMap.set("name", planName);
+      boardInfoMap.set("location", "VIETNAM");
+
       const orderArray = doc.getArray("columnOrder");
       const metadataMap = doc.getMap("columnMetadata");
       const columnsMap = doc.getMap("columns");
