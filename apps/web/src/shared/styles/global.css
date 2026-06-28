@@ -801,8 +801,7 @@ body {
 
 .board-canvas-area {
   flex: 1;
-  overflow-x: auto;
-  overflow-y: auto; /* allow vertical scrolling on whiteboard */
+  overflow: hidden; /* Hide scrollbars, allow free Figma-style pan/zoom */
   padding: 32px;
   position: relative; /* important for relative coordinates mouse tracking */
   background-color: #070709;

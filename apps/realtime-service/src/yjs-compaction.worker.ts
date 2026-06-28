@@ -97,7 +97,7 @@ async function releaseLock(lockKey: string, lockToken: string): Promise<void> {
  * Starts a periodic interval scheduler to run compaction for active documents
  */
 export function startCompactionScheduler(intervalMs: number = 300000): NodeJS.Timeout {
-  console.log(`⏱️ Starting Compaction Scheduler (Interval: ${intervalMs / 1000}s)`);
+  console.log(`Starting Compaction Scheduler (Interval: ${intervalMs / 1000}s)`);
 
   return setInterval(async () => {
     const activeDocIds = documentRegistry.keys();
