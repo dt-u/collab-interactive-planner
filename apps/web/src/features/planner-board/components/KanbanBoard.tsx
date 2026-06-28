@@ -22,6 +22,7 @@ import {
   getSharedItems,
   getSharedColumnOrder,
   getSharedColumnMetadata,
+  getSharedBoardInfo,
 } from "@collab-planner/yjs-utils";
 import { httpClient } from "../../../shared/api/http-client.js";
 import { BoardTaskCard } from "./BoardTaskCard.js";
@@ -305,34 +306,41 @@ export const KanbanBoard: React.FC = () => {
 
   useEffect(() => {
     if (!yDoc) return;
-    const planMetadataMap = yDoc.getMap("planMetadata");
+    const boardInfoMap = getSharedBoardInfo(yDoc);
     
-    // Initial load
-    const currentLoc = planMetadataMap.get("location") as string;
-    if (currentLoc) {
-      setLocalLocation(currentLoc);
-    }
+    const updateStatesFromYjs = () => {
+      const name = boardInfoMap.get("name") as string;
+      const location = boardInfoMap.get("location") as string;
 
-    // Observe changes
-    const handleObserve = () => {
-      const loc = planMetadataMap.get("location") as string;
-      if (loc) {
-        setLocalLocation(loc);
+      if (name) {
+        setBoardDetails((prev) => {
+          if (!prev) return null;
+          if (prev.name === name) return prev;
+          return { ...prev, name };
+        });
+      }
+      if (location) {
+        setLocalLocation(location);
       }
     };
-    planMetadataMap.observe(handleObserve);
+
+    // Run initial load
+    updateStatesFromYjs();
+
+    // Observe changes
+    boardInfoMap.observe(updateStatesFromYjs);
 
     return () => {
-      planMetadataMap.unobserve(handleObserve);
+      boardInfoMap.unobserve(updateStatesFromYjs);
     };
   }, [yDoc]);
 
   const handleSaveLocationInline = () => {
     if (!yDoc) return;
-    const planMetadataMap = yDoc.getMap("planMetadata");
+    const boardInfoMap = getSharedBoardInfo(yDoc);
     const val = editingLocationValue.trim() || "VIETNAM";
     yDoc.transact(() => {
-      planMetadataMap.set("location", val);
+      boardInfoMap.set("location", val);
     });
     setLocalLocation(val);
     setIsEditingLocation(false);
@@ -348,6 +356,13 @@ export const KanbanBoard: React.FC = () => {
         name: editingPlanNameValue,
       });
       setBoardDetails((prev) => prev ? { ...prev, name: editingPlanNameValue } : null);
+
+      if (yDoc) {
+        const boardInfoMap = getSharedBoardInfo(yDoc);
+        yDoc.transact(() => {
+          boardInfoMap.set("name", editingPlanNameValue);
+        });
+      }
     } catch (err: any) {
       console.error("Failed to update plan name:", err);
       showToast("Failed to update board name", "error");
@@ -412,6 +427,14 @@ export const KanbanBoard: React.FC = () => {
         ...prev,
         name: tempWorkspaceName,
       } : null);
+
+      // Sync name in real-time with other peers
+      if (yDoc) {
+        const boardInfoMap = getSharedBoardInfo(yDoc);
+        yDoc.transact(() => {
+          boardInfoMap.set("name", tempBoardName);
+        });
+      }
 
       setShowEditBoardModal(false);
     } catch (err: any) {
