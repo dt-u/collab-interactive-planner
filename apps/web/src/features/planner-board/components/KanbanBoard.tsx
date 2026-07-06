@@ -246,6 +246,59 @@ export const KanbanBoard: React.FC = () => {
     setPan({ x: nextPanX, y: nextPanY });
   };
 
+  // Auto-scroll the infinite canvas viewport when dragging near screen edges.
+  useEffect(() => {
+    if (!activeId) return;
+
+    let animationFrameId: number;
+    let currentX = window.innerWidth / 2;
+    let currentY = window.innerHeight / 2;
+
+    const handlePointerMove = (e: PointerEvent) => {
+      currentX = e.clientX;
+      currentY = e.clientY;
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+
+    const checkEdgeAndPan = () => {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      const threshold = 50;
+      const baseSpeed = 10;
+      let deltaX = 0;
+      let deltaY = 0;
+
+      if (currentX > width - threshold) {
+        deltaX = -baseSpeed / zoom;
+      } else if (currentX < threshold) {
+        deltaX = baseSpeed / zoom;
+      }
+
+      if (currentY > height - threshold) {
+        deltaY = -baseSpeed / zoom;
+      } else if (currentY < threshold) {
+        deltaY = baseSpeed / zoom;
+      }
+
+      if (deltaX !== 0 || deltaY !== 0) {
+        setPan((prev) => ({
+          x: prev.x + deltaX,
+          y: prev.y + deltaY,
+        }));
+      }
+
+      animationFrameId = requestAnimationFrame(checkEdgeAndPan);
+    };
+
+    animationFrameId = requestAnimationFrame(checkEdgeAndPan);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, [activeId, zoom]);
+
   // Scale sortable item movement inside the zoomed board while keeping DragOverlay pointer-locked.
   const customCanvasScaleModifier = useMemo(() => {
     return ({ transform, activeNodeRect }: { transform: any; activeNodeRect: any }) => {
