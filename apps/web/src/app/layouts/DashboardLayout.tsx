@@ -187,7 +187,7 @@ export const DashboardLayout: React.FC = () => {
           </header>
         )}
 
-        <main className="app-main" style={planId ? { height: "100%", padding: 0, overflow: "hidden" } : undefined}>
+        <main className={`app-main ${planId ? "whiteboard-mode" : ""}`} style={planId ? { height: "100%", padding: 0, overflow: "hidden" } : undefined}>
           <Outlet context={{ isSidebarCollapsed, toggleSidebar }} />
         </main>
       </div>

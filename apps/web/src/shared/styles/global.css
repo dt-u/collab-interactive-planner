@@ -364,6 +364,18 @@ body {
   position: relative;
 }
 
+.app-main.whiteboard-mode {
+  overflow: hidden !important;
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.app-main.whiteboard-mode::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
 /* Modals & Backdrop */
 .modal-backdrop {
   position: fixed;
@@ -801,7 +813,7 @@ body {
 
 .board-canvas-area {
   flex: 1;
-  overflow: hidden; /* Hide scrollbars, allow free Figma-style pan/zoom */
+  overflow: hidden !important; /* Prevents default browser scroll layouts */
   padding: 32px;
   position: relative; /* important for relative coordinates mouse tracking */
   background-color: #070709;
@@ -809,6 +821,15 @@ body {
     linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
   background-size: 30px 30px;
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+/* Safe fallback to ensure no scrollbar renders in webkit/firefox browsers */
+.board-canvas-area::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 .board-columns-list {
