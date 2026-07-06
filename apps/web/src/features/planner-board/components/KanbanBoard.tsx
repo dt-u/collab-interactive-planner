@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useParams, useNavigate, useOutletContext } from "react-router-dom";
 import * as Y from "yjs";
 import {
@@ -10,6 +11,9 @@ import {
   DragEndEvent,
   useDroppable,
   DragOverlay,
+  CollisionDetection,
+  rectIntersection,
+  pointerWithin,
 } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { useAuth } from "../../../app/providers/AuthProvider.js";
@@ -61,21 +65,21 @@ const ColumnCardsContainer: React.FC<ColumnCardsContainerProps> = ({ colId, chil
 const parseTimeToMinutes = (timeStr: string | undefined): number => {
   if (!timeStr) return 9999; // tasks without time go to the end
   const clean = timeStr.trim().toLowerCase();
-  
+
   const match = clean.match(/^(\d{1,2}):(\d{2})\s*(am|pm)?$/);
   if (!match) {
     const simpleHour = parseInt(clean);
     if (!isNaN(simpleHour)) return simpleHour * 60;
     return 9999;
   }
-  
+
   let hours = parseInt(match[1]);
   const minutes = parseInt(match[2]);
   const ampm = match[3];
-  
+
   if (ampm === "pm" && hours < 12) hours += 12;
   if (ampm === "am" && hours === 12) hours = 0;
-  
+
   return hours * 60 + minutes;
 };
 
@@ -189,13 +193,13 @@ export const KanbanBoard: React.FC = () => {
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
-    const isCanvas = 
-      target.classList.contains("board-canvas-area") || 
-      target.classList.contains("whiteboard-viewport") || 
+    const isCanvas =
+      target.classList.contains("board-canvas-area") ||
+      target.classList.contains("whiteboard-viewport") ||
       target.classList.contains("board-columns-list");
 
     const shouldPan = e.button === 1 || e.button === 2 || spacePressed.current || isCanvas;
-    
+
     if (shouldPan) {
       setIsPanning(true);
       setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
@@ -243,13 +247,64 @@ export const KanbanBoard: React.FC = () => {
   };
 
   // Scale sortable item movement inside the zoomed board while keeping DragOverlay pointer-locked.
-  const zoomModifier = useMemo(() => {
-    return ({ transform }: { transform: any }) => {
+  const customCanvasScaleModifier = useMemo(() => {
+    return ({ transform, activeNodeRect }: { transform: any; activeNodeRect: any }) => {
+      if (!transform || !activeNodeRect) return transform;
       return {
         ...transform,
         x: transform.x / zoom,
         y: transform.y / zoom,
       };
+    };
+  }, [zoom]);
+
+  // Restore DragOverlay coordinates to 1:1 speed, since it is rendered outside the scaled wrapper.
+  const overlayModifier = useMemo(() => {
+    return ({ transform }: { transform: any }) => {
+      return {
+        ...transform,
+        x: transform.x * zoom,
+        y: transform.y * zoom,
+      };
+    };
+  }, [zoom]);
+
+  // Normalize collision rect bounds using the inverse transform scale for exact intersection checks.
+  const customCollisionDetection = useMemo(() => {
+    return (args: any) => {
+      const pointerCollisions = pointerWithin(args);
+      if (pointerCollisions.length > 0) {
+        return pointerCollisions;
+      }
+
+      const { active, collisionRect, pointerCoordinates } = args;
+      if (!collisionRect || !pointerCoordinates) {
+        return rectIntersection(args);
+      }
+
+      const draggingRect = active.rect.current.translated;
+      if (draggingRect) {
+        const width = draggingRect.width;
+        const height = draggingRect.height;
+        const transformX = (active.transform?.x ?? 0) * zoom;
+        const transformY = (active.transform?.y ?? 0) * zoom;
+
+        const correctedRect = {
+          width,
+          height,
+          top: active.rect.current.initial?.top ? active.rect.current.initial.top + transformY : draggingRect.top,
+          bottom: active.rect.current.initial?.bottom ? active.rect.current.initial.bottom + transformY : draggingRect.bottom,
+          left: active.rect.current.initial?.left ? active.rect.current.initial.left + transformX : draggingRect.left,
+          right: active.rect.current.initial?.right ? active.rect.current.initial.right + transformX : draggingRect.right,
+        };
+
+        return rectIntersection({
+          ...args,
+          collisionRect: correctedRect,
+        });
+      }
+
+      return rectIntersection(args);
     };
   }, [zoom]);
 
@@ -303,14 +358,17 @@ export const KanbanBoard: React.FC = () => {
   const [editingLocationValue, setEditingLocationValue] = useState("");
   const [isEditingPlanName, setIsEditingPlanName] = useState(false);
   const [editingPlanNameValue, setEditingPlanNameValue] = useState("");
+  const [isEditingDesc, setIsEditingDesc] = useState(false);
+  const [editingDescValue, setEditingDescValue] = useState("");
 
   useEffect(() => {
     if (!yDoc) return;
     const boardInfoMap = getSharedBoardInfo(yDoc);
-    
+
     const updateStatesFromYjs = () => {
       const name = boardInfoMap.get("name") as string;
       const location = boardInfoMap.get("location") as string;
+      const description = boardInfoMap.get("description") as string;
 
       if (name) {
         setBoardDetails((prev) => {
@@ -321,6 +379,13 @@ export const KanbanBoard: React.FC = () => {
       }
       if (location) {
         setLocalLocation(location);
+      }
+      if (description !== undefined) {
+        setBoardDetails((prev) => {
+          if (!prev) return null;
+          if (prev.description === description) return prev;
+          return { ...prev, description };
+        });
       }
     };
 
@@ -368,6 +433,32 @@ export const KanbanBoard: React.FC = () => {
       showToast("Failed to update board name", "error");
     } finally {
       setIsEditingPlanName(false);
+    }
+  };
+
+  const handleSaveDescInline = async () => {
+    if (!planId) {
+      setIsEditingDesc(false);
+      return;
+    }
+    const val = editingDescValue.trim();
+    try {
+      await httpClient.patch(`/plans/${planId}`, {
+        description: val,
+      });
+      setBoardDetails((prev) => prev ? { ...prev, description: val } : null);
+
+      if (yDoc) {
+        const boardInfoMap = getSharedBoardInfo(yDoc);
+        yDoc.transact(() => {
+          boardInfoMap.set("description", val);
+        });
+      }
+    } catch (err: any) {
+      console.error("Failed to update plan description:", err);
+      showToast("Failed to update description", "error");
+    } finally {
+      setIsEditingDesc(false);
     }
   };
 
@@ -506,7 +597,7 @@ export const KanbanBoard: React.FC = () => {
           const columnsMap = getSharedColumns(yDoc);
           const itemsMap = getSharedItems(yDoc);
           const sourceCol = findColumnOfTaskId(taskId);
-          
+
           if (sourceCol) {
             const sourceArray = columnsMap.get(sourceCol);
             if (sourceArray) {
@@ -516,7 +607,7 @@ export const KanbanBoard: React.FC = () => {
               }
             }
           }
-          
+
           itemsMap.delete(taskId);
         });
       }
@@ -803,7 +894,7 @@ export const KanbanBoard: React.FC = () => {
             >
               <ArrowLeft size={18} />
             </button>
-            
+
             {isEditingPlanName ? (
               <input
                 type="text"
@@ -829,7 +920,7 @@ export const KanbanBoard: React.FC = () => {
                 }}
               />
             ) : (
-              <h2 
+              <h2
                 onDoubleClick={() => {
                   setEditingPlanNameValue(boardDetails?.name || "");
                   setIsEditingPlanName(true);
@@ -841,23 +932,6 @@ export const KanbanBoard: React.FC = () => {
               </h2>
             )}
 
-            <button
-              onClick={handleOpenEditBoardModal}
-              style={{
-                background: "transparent",
-                border: "none",
-                color: "#64748b",
-                cursor: "pointer",
-                padding: 4,
-                display: "flex",
-                alignItems: "center",
-                borderRadius: 4,
-              }}
-              title="Edit Board & Workspace Details"
-            >
-              <Settings size={16} />
-            </button>
-            
             {isEditingLocation ? (
               <input
                 type="text"
@@ -884,7 +958,7 @@ export const KanbanBoard: React.FC = () => {
                 }}
               />
             ) : (
-              <div 
+              <div
                 className="location-pill-whiteboard"
                 onDoubleClick={() => {
                   setEditingLocationValue(localLocation);
@@ -898,15 +972,54 @@ export const KanbanBoard: React.FC = () => {
               </div>
             )}
           </div>
-          <p>{boardDetails?.description || "Collaborative co-op trip space"}</p>
+          {isEditingDesc ? (
+            <textarea
+              value={editingDescValue}
+              onChange={(e) => setEditingDescValue(e.target.value)}
+              onBlur={handleSaveDescInline}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSaveDescInline();
+                }
+                if (e.key === "Escape") setIsEditingDesc(false);
+              }}
+              autoFocus
+              rows={2}
+              style={{
+                background: "rgba(255,255,255,0.05)",
+                border: "1px solid var(--border-color)",
+                borderRadius: "8px",
+                color: "var(--text-muted)",
+                fontFamily: "inherit",
+                fontSize: "13px",
+                outline: "none",
+                padding: "6px 12px",
+                width: "100%",
+                maxWidth: "600px",
+                resize: "vertical"
+              }}
+            />
+          ) : (
+            <p
+              onDoubleClick={() => {
+                setEditingDescValue(boardDetails?.description || "");
+                setIsEditingDesc(true);
+              }}
+              title="Double click to edit description"
+              style={{ cursor: "pointer", display: "inline-block" }}
+            >
+              {boardDetails?.description || "Collaborative co-op trip space"}
+            </p>
+          )}
         </div>
 
         {/* Collaborators Active List & Invite Peers shortcut */}
         <div className="board-collaborators" style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <div className="online-status-whiteboard">
-            <span className="relative flex h-2.5 w-2.5" style={{ display: "inline-flex", width: 10, height: 10, position: "relative" }}>
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" style={{ position: "absolute", inset: 0, borderRadius: "50%" }}></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" style={{ position: "relative", display: "inline-block", width: 10, height: 10, borderRadius: "50%" }}></span>
+            <span className="status-dot-wrapper">
+              <span className="status-dot-ping"></span>
+              <span className="status-dot"></span>
             </span>
             <span>LIVE: {uniqueCollaborators.length} ONLINE</span>
           </div>
@@ -941,8 +1054,8 @@ export const KanbanBoard: React.FC = () => {
       </header>
 
       {/* Board Canvas (Figma-style pan/zoom handlers attached) */}
-      <div 
-        className="board-canvas-area whiteboard" 
+      <div
+        className="board-canvas-area whiteboard"
         ref={canvasRef}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMovePan}
@@ -954,10 +1067,11 @@ export const KanbanBoard: React.FC = () => {
           sensors={sensors}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
-          modifiers={[zoomModifier]}
+          modifiers={[customCanvasScaleModifier]}
+          collisionDetection={customCollisionDetection}
         >
           {/* Transforming viewport containing columns & nested cursors layer */}
-          <div 
+          <div
             ref={viewportRef}
             className="whiteboard-viewport"
             style={{
@@ -1150,28 +1264,28 @@ export const KanbanBoard: React.FC = () => {
                     }}
                   >
                     <div style={{ position: "relative", display: "inline-flex" }}>
-                      <svg 
-                        width="24" height="24" viewBox="0 0 24 24" fill="none" 
+                      <svg
+                        width="24" height="24" viewBox="0 0 24 24" fill="none"
                         xmlns="http://www.w3.org/2000/svg"
                         style={{ filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.15))" }}
                       >
-                        <path d="M5.5 3.21V20.8C5.5 21.6 6.38 22.08 7.04 21.65L10.82 19.16C11.08 18.99 11.4 18.92 11.71 18.97L16.29 19.68C17.06 19.8 17.65 19.06 17.37 18.33L10.37 3.01C10.02 2.23 8.88 2.31 8.65 3.13L5.5 3.21Z" fill={c.color} stroke="white" strokeWidth="1.5"/>
+                        <path d="M5.5 3.21V20.8C5.5 21.6 6.38 22.08 7.04 21.65L10.82 19.16C11.08 18.99 11.4 18.92 11.71 18.97L16.29 19.68C17.06 19.8 17.65 19.06 17.37 18.33L10.37 3.01C10.02 2.23 8.88 2.31 8.65 3.13L5.5 3.21Z" fill={c.color} stroke="white" strokeWidth="1.5" />
                       </svg>
-                      <div 
-                        className="animate-pulse-ring" 
-                        style={{ 
-                          position: "absolute", 
-                          top: 4, 
-                          left: 4, 
-                          width: 12, 
-                          height: 12, 
-                          borderRadius: "50%", 
+                      <div
+                        className="animate-pulse-ring"
+                        style={{
+                          position: "absolute",
+                          top: 4,
+                          left: 4,
+                          width: 12,
+                          height: 12,
+                          borderRadius: "50%",
                           backgroundColor: c.color,
                           zIndex: -1,
-                        }} 
+                        }}
                       />
                     </div>
-                    <div 
+                    <div
                       style={{
                         backgroundColor: c.color,
                         marginTop: 4,
@@ -1191,27 +1305,38 @@ export const KanbanBoard: React.FC = () => {
                   </div>
                 ))}
             </div>
+
           </div>
 
           {/* Floating DragOverlay styled preview */}
-          <DragOverlay dropAnimation={null}>
-            {activeId ? (
-              <div className="drag-overlay-card">
-                <BoardTaskCard
-                  taskId={activeId}
-                  yDoc={yDoc}
-                  onClick={() => {}}
-                  focusingCollaborators={[]}
-                  themeColor={getActiveCardThemeColor()}
-                  isOverlay
-                />
-              </div>
-            ) : null}
-          </DragOverlay>
+          {createPortal(
+            <DragOverlay dropAnimation={null} modifiers={[overlayModifier]}>
+              {activeId ? (
+                <div
+                  style={{
+                    width: '280px',
+                    height: 'auto',
+                    boxSizing: 'border-box',
+                    opacity: 0.9,
+                  }}
+                >
+                  <BoardTaskCard
+                    taskId={activeId}
+                    yDoc={yDoc}
+                    onClick={() => { }}
+                    focusingCollaborators={[]}
+                    themeColor={getActiveCardThemeColor()}
+                    isOverlay
+                  />
+                </div>
+              ) : null}
+            </DragOverlay>,
+            document.body
+          )}
         </DndContext>
 
         {/* Floating Canvas Zoom/Pan Controls */}
-        <div 
+        <div
           style={{
             position: "absolute",
             bottom: 24,

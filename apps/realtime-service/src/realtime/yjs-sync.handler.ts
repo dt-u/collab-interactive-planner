@@ -39,12 +39,14 @@ export async function hydrateDocument(docId: string, doc: Y.Doc): Promise<void> 
   if (!snapshot && deltas.length === 0) {
     console.log(`Initializing default workspace days and item for new Y.Doc: ${docId}`);
     
-    // Fetch plan details from database to initialize boardInfo name
+    // Fetch plan details from database to initialize boardInfo name and description
     let planName = "My Plan Board";
+    let planDesc = "Collaborative co-op trip space";
     try {
       const plan = await PlanModel.findById(docId);
       if (plan) {
         planName = plan.name;
+        planDesc = plan.description || "Collaborative co-op trip space";
       }
     } catch (dbErr) {
       console.error(`Failed to fetch plan details for initial YDoc hydration:`, dbErr);
@@ -54,6 +56,7 @@ export async function hydrateDocument(docId: string, doc: Y.Doc): Promise<void> 
       const boardInfoMap = doc.getMap("boardInfo");
       boardInfoMap.set("name", planName);
       boardInfoMap.set("location", "VIETNAM");
+      boardInfoMap.set("description", planDesc);
 
       const orderArray = doc.getArray("columnOrder");
       const metadataMap = doc.getMap("columnMetadata");
