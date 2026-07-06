@@ -14,6 +14,7 @@ import {
   CollisionDetection,
   rectIntersection,
   pointerWithin,
+  MeasuringStrategy,
 } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { useAuth } from "../../../app/providers/AuthProvider.js";
@@ -81,6 +82,13 @@ const parseTimeToMinutes = (timeStr: string | undefined): number => {
   if (ampm === "am" && hours === 12) hours = 0;
 
   return hours * 60 + minutes;
+};
+
+// Force dnd-kit to re-measure droppable container bounding client rects on every drag frame.
+const dndMeasuringConfig = {
+  droppable: {
+    strategy: MeasuringStrategy.Always,
+  },
 };
 
 export const KanbanBoard: React.FC = () => {
@@ -248,7 +256,7 @@ export const KanbanBoard: React.FC = () => {
 
   // Auto-scroll the infinite canvas viewport when dragging near screen edges.
   useEffect(() => {
-    if (!activeId) return;
+    if (!isDraggingLocal) return;
 
     let animationFrameId: number;
     let currentX = window.innerWidth / 2;
@@ -286,6 +294,7 @@ export const KanbanBoard: React.FC = () => {
           x: prev.x + deltaX,
           y: prev.y + deltaY,
         }));
+        window.dispatchEvent(new Event("scroll"));
       }
 
       animationFrameId = requestAnimationFrame(checkEdgeAndPan);
@@ -297,7 +306,7 @@ export const KanbanBoard: React.FC = () => {
       window.removeEventListener("pointermove", handlePointerMove);
       cancelAnimationFrame(animationFrameId);
     };
-  }, [activeId, zoom]);
+  }, [isDraggingLocal, zoom]);
 
   // Scale sortable item movement inside the zoomed board while keeping DragOverlay pointer-locked.
   const customCanvasScaleModifier = useMemo(() => {
@@ -684,6 +693,7 @@ export const KanbanBoard: React.FC = () => {
 
   const handleDragEnd = (event: DragEndEvent) => {
     setIsDraggingLocal(false);
+    setActiveId(null);
     const { active, over } = event;
 
     if (!over || !yDoc) return;
@@ -707,12 +717,14 @@ export const KanbanBoard: React.FC = () => {
     if (!sourceArray || !destArray) return;
 
     const sourceIndex = columns[sourceCol].indexOf(activeId);
-    let destIndex = 0;
+    if (sourceIndex === -1) return;
 
+    let destIndex = 0;
     if (columnOrder.includes(overId)) {
       destIndex = columns[destCol].length;
     } else {
-      destIndex = columns[destCol].indexOf(overId);
+      const idx = columns[destCol].indexOf(overId);
+      destIndex = idx === -1 ? columns[destCol].length : idx;
     }
 
     if (sourceCol === destCol && sourceIndex === destIndex) return;
@@ -732,6 +744,11 @@ export const KanbanBoard: React.FC = () => {
         }
       }
     });
+  };
+
+  const handleDragCancel = () => {
+    setIsDraggingLocal(false);
+    setActiveId(null);
   };
 
   // Create Task Action
@@ -1120,8 +1137,10 @@ export const KanbanBoard: React.FC = () => {
           sensors={sensors}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
+          onDragCancel={handleDragCancel}
           modifiers={[customCanvasScaleModifier]}
           collisionDetection={customCollisionDetection}
+          measuring={dndMeasuringConfig}
         >
           {/* Transforming viewport containing columns & nested cursors layer */}
           <div
