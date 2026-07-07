@@ -5,7 +5,7 @@ import { WorkspaceDto, PlanDto } from "@collab-planner/shared";
 import { Folder, Plus, FileText, ChevronRight, UserPlus, Trash2, Edit2, CheckCircle2, AlertCircle, LogOut } from "lucide-react";
 import { Spinner } from "../../../shared/ui/spinner/Spinner.js";
 import { useAuth } from "../../../app/providers/AuthProvider.js";
-import { useWorkspaceStore } from "../stores/workspace-ui.store.js";
+import { useWorkspaceStore, WorkspaceUiState } from "../stores/workspace-ui.store.js";
 
 interface WorkspaceWithPlans extends WorkspaceDto {
   plans: PlanDto[];
@@ -16,8 +16,8 @@ export const WorkspaceListPage: React.FC = () => {
   const navigate = useNavigate();
   const { workspaceId } = useParams<{ workspaceId?: string }>();
   const { user: currentUser } = useAuth();
-  const setActiveWorkspaceId = useWorkspaceStore((state) => state.setActiveWorkspaceId);
-  const triggerWorkspaceListReload = useWorkspaceStore((state) => state.triggerWorkspaceListReload);
+  const setActiveWorkspaceId = useWorkspaceStore((state: WorkspaceUiState) => state.setActiveWorkspaceId);
+  const triggerWorkspaceListReload = useWorkspaceStore((state: WorkspaceUiState) => state.triggerWorkspaceListReload);
 
   const [workspaces, setWorkspaces] = useState<WorkspaceWithPlans[]>([]);
   const [loading, setLoading] = useState(true);

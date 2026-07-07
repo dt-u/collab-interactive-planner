@@ -6,6 +6,8 @@ import { WorkspaceDto } from "@collab-planner/shared";
 import { LayoutDashboard, Plus, LogOut, Folder, FileText, Bell, User, Menu, ArrowLeft } from "lucide-react";
 import { Spinner } from "../../shared/ui/spinner/Spinner.js";
 import { useWorkspaceStore } from "../../features/workspaces/stores/workspace-ui.store.js";
+import { useSocketConnection } from "../../features/realtime/hooks/useSocketConnection.js";
+import { useNotificationStore } from "../../features/notifications/stores/notification.store.js";
 
 export const DashboardLayout: React.FC = () => {
   const { user, logout } = useAuth();
@@ -26,6 +28,40 @@ export const DashboardLayout: React.FC = () => {
       setActiveWorkspaceId(null);
     }
   }, [workspaceId, setActiveWorkspaceId]);
+
+  const socket = useSocketConnection();
+  const { unreadCount, addNotification, setNotifications, resetUnreadCount } = useNotificationStore();
+
+  // Fetch unread notifications on mount
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      try {
+        const res = await httpClient.get("/notifications");
+        setNotifications(res.data?.data || []);
+      } catch (err) {
+        console.error("Failed to fetch initial notifications:", err);
+      }
+    };
+    fetchNotifications();
+  }, [setNotifications]);
+
+  // Handle incoming realtime notification socket events
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleNotificationReceived = (notification: any) => {
+      addNotification(notification);
+      // Trigger list update if invite arrived
+      if (notification.type === "invitation") {
+        triggerWorkspaceListReload();
+      }
+    };
+
+    socket.on("notification:received", handleNotificationReceived);
+    return () => {
+      socket.off("notification:received", handleNotificationReceived);
+    };
+  }, [socket, addNotification, triggerWorkspaceListReload]);
 
   // Collapsible sidebar state (persisted in localStorage)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
@@ -197,9 +233,36 @@ export const DashboardLayout: React.FC = () => {
             </div>
 
             <div className="header-actions">
-              <button className="header-icon-btn" title="Notifications">
+              <button
+                className="header-icon-btn"
+                style={{ position: "relative" }}
+                title="Notifications"
+                onClick={() => {
+                  resetUnreadCount();
+                  navigate("/notifications");
+                }}
+              >
                 <Bell size={20} />
-                <span className="notification-badge"></span>
+                {unreadCount > 0 && (
+                  <span className="notification-badge" style={{
+                    position: "absolute",
+                    top: -4,
+                    right: -4,
+                    backgroundColor: "#ef4444",
+                    color: "#ffffff",
+                    borderRadius: "50%",
+                    fontSize: 10,
+                    fontWeight: "bold",
+                    minWidth: 16,
+                    height: 16,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: "0 4px"
+                  }}>
+                    {unreadCount}
+                  </span>
+                )}
               </button>
             </div>
           </header>
