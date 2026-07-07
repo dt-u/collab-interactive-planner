@@ -7,6 +7,7 @@ import { ServerToClientEvents, ClientToServerEvents } from "@collab-planner/real
 import { socketAuthMiddleware } from "./middleware/socket-auth.middleware.js";
 import { registerRoomHandlers } from "./realtime/socket-room.handler.js";
 import { registerYjsSyncHandlers, initializeClusterSync } from "./realtime/yjs-sync.handler.js";
+import { initializeNotificationSync } from "./realtime/notification.handler.js";
 
 export interface SocketData {
   user?: {
@@ -64,10 +65,27 @@ export function createRealtimeServer(httpServer: http.Server): RealtimeServer {
     initializeClusterSync(subClient).catch(err => {
       console.error("Failed to initialize cluster sync subscription:", err);
     });
+
+    // Initialize real-time notification sync pub/sub subscription
+    initializeNotificationSync(subClient, io).catch(err => {
+      console.error("Failed to initialize real-time notification sync subscription:", err);
+    });
   }
 
   // Handle client connections
   io.on("connection", (socket) => {
+    const user = socket.data.user;
+    if (user) {
+      const userRoom = `user:${user.userId}`;
+      socket.join(userRoom);
+      
+      // Handle socket disconnect to avoid ghost rooms and memory leaks
+      socket.on("disconnect", () => {
+        socket.leave(userRoom);
+        socket.removeAllListeners("notification:received");
+      });
+    }
+
     registerRoomHandlers(socket, io);
     registerYjsSyncHandlers(socket, io);
   });
