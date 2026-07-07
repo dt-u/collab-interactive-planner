@@ -2,6 +2,7 @@ import { NotificationRepository } from "./notification.repository.js";
 import { NotificationMapper } from "./notification.mapper.js";
 import { NotificationDto } from "@collab-planner/shared";
 import { AppError } from "../../middleware/error.middleware.js";
+import { redisPublisher } from "../../shared/redis/redis-publisher.js";
 
 export class NotificationService {
   constructor(
@@ -61,6 +62,11 @@ export class NotificationService {
       metadata,
     });
 
-    return NotificationMapper.toDto(notification);
+    const dto = NotificationMapper.toDto(notification);
+    
+    // Publish the notification through the Redis pub/sub channel for real-time sync
+    await redisPublisher.publishNotification(recipientId, dto);
+
+    return dto;
   }
 }

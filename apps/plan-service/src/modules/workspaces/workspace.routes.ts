@@ -15,6 +15,9 @@ router.use(authMiddleware);
 
 router.post("/", validateBody(createWorkspaceRequestSchema), controller.create);
 router.get("/", controller.list);
+router.get("/invitations/pending", controller.listPendingInvitations);
+router.post("/invitations/:invitationId/accept", controller.acceptInvitation);
+router.post("/invitations/:invitationId/decline", controller.declineInvitation);
 router.get("/:id", controller.get);
 router.patch("/:id", validateBody(updateWorkspaceRequestSchema), controller.update);
 router.delete("/:id", controller.delete);

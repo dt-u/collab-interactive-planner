@@ -169,4 +169,63 @@ export class WorkspaceController {
       next(error);
     }
   };
+
+  listPendingInvitations = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const userId = req.user?.userId;
+      if (!userId) {
+        res.status(401).json({ success: false, error: { message: "Unauthorized" } });
+        return;
+      }
+
+      const list = await this.workspaceService.getPendingInvitations(userId);
+      res.status(200).json({ success: true, data: list });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  acceptInvitation = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const { invitationId } = req.params;
+      const userId = req.user?.userId;
+      if (!userId) {
+        res.status(401).json({ success: false, error: { message: "Unauthorized" } });
+        return;
+      }
+
+      const workspace = await this.workspaceService.acceptInvitation(invitationId, userId);
+      res.status(200).json({ success: true, data: workspace });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  declineInvitation = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const { invitationId } = req.params;
+      const userId = req.user?.userId;
+      if (!userId) {
+        res.status(401).json({ success: false, error: { message: "Unauthorized" } });
+        return;
+      }
+
+      await this.workspaceService.declineInvitation(invitationId, userId);
+      res.status(200).json({ success: true, data: { message: "Invitation declined successfully" } });
+    } catch (error) {
+      next(error);
+    }
+  };
 }
