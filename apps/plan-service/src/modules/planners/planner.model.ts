@@ -26,3 +26,17 @@ const PlanSchema = new Schema<IPlan>(
 );
 
 export const PlanModel = mongoose.model<IPlan>("Plan", PlanSchema);
+
+export const YjsSnapshotModel =
+  mongoose.models.YjsSnapshot ||
+  mongoose.model(
+    "YjsSnapshot",
+    new Schema({ docId: { type: String, required: true, unique: true, index: true } })
+  );
+
+export const YjsUpdateLogModel =
+  mongoose.models.YjsUpdateLog ||
+  mongoose.model(
+    "YjsUpdateLog",
+    new Schema({ docId: { type: String, required: true, index: true } })
+  );

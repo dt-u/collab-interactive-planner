@@ -5,6 +5,7 @@ import { httpClient } from "../../shared/api/http-client.js";
 import { WorkspaceDto } from "@collab-planner/shared";
 import { LayoutDashboard, Plus, LogOut, Folder, FileText, Bell, User, Menu, ArrowLeft } from "lucide-react";
 import { Spinner } from "../../shared/ui/spinner/Spinner.js";
+import { useWorkspaceStore } from "../../features/workspaces/stores/workspace-ui.store.js";
 
 export const DashboardLayout: React.FC = () => {
   const { user, logout } = useAuth();
@@ -15,7 +16,16 @@ export const DashboardLayout: React.FC = () => {
   const [showNewWorkspaceModal, setShowNewWorkspaceModal] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState("");
   const [createLoading, setCreateLoading] = useState(false);
-  const { planId } = useParams<{ planId?: string }>();
+  const { workspaceId, planId } = useParams<{ workspaceId?: string; planId?: string }>();
+  const { activeWorkspaceId, setActiveWorkspaceId } = useWorkspaceStore();
+
+  useEffect(() => {
+    if (workspaceId) {
+      setActiveWorkspaceId(workspaceId);
+    } else {
+      setActiveWorkspaceId(null);
+    }
+  }, [workspaceId, setActiveWorkspaceId]);
 
   // Collapsible sidebar state (persisted in localStorage)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
@@ -110,7 +120,15 @@ export const DashboardLayout: React.FC = () => {
           ) : (
             <div className="sidebar-workspace-list">
               {workspaces.map((ws) => (
-                <div key={ws.id} className="workspace-item-group">
+                <div
+                  key={ws.id}
+                  className={`workspace-item-group ${activeWorkspaceId === ws.id ? "active" : ""}`}
+                  onClick={() => {
+                    setActiveWorkspaceId(ws.id);
+                    navigate(`/workspace/${ws.id}`);
+                  }}
+                  style={{ cursor: "pointer" }}
+                >
                   <div className="workspace-item-header">
                     <Folder size={16} />
                     <span className="workspace-name-text">{ws.name}</span>

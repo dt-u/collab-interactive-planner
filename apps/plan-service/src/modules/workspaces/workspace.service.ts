@@ -3,6 +3,7 @@ import { UserRepository } from "../users/user.repository.js";
 import { WorkspaceMapper } from "./workspace.mapper.js";
 import { WorkspaceDto, MemberRole, UpdateWorkspaceRequest } from "@collab-planner/shared";
 import { AppError } from "../../middleware/error.middleware.js";
+import { PlanModel, YjsSnapshotModel, YjsUpdateLogModel } from "../planners/planner.model.js";
 
 export class WorkspaceService {
   constructor(
@@ -134,5 +135,54 @@ export class WorkspaceService {
     if (!updated) throw new AppError("Failed to add member to workspace", 500);
 
     return WorkspaceMapper.toDto(updated);
+  }
+
+  async deleteWorkspace(workspaceId: string, userId: string): Promise<void> {
+    const workspace = await this.workspaceRepository.findById(workspaceId);
+    if (!workspace) {
+      throw new AppError("Workspace not found", 404, "WORKSPACE_NOT_FOUND");
+    }
+
+    if (workspace.ownerId.toString() !== userId) {
+      throw new AppError(
+        "Access denied. Only the workspace owner can delete this workspace.",
+        403,
+        "FORBIDDEN",
+      );
+    }
+
+    // Find all plans in the workspace to cascade delete Yjs snapshots & logs
+    const plans = await PlanModel.find({ workspaceId }).exec();
+    for (const plan of plans) {
+      const planId = plan._id.toString();
+      await YjsSnapshotModel.deleteMany({ docId: planId }).exec();
+      await YjsUpdateLogModel.deleteMany({ docId: planId }).exec();
+    }
+
+    // Clean up all plans associated with the workspace from database
+    await PlanModel.deleteMany({ workspaceId }).exec();
+
+    // Delete the workspace document
+    await this.workspaceRepository.delete(workspaceId);
+  }
+
+  async leaveWorkspace(workspaceId: string, userId: string): Promise<void> {
+    const workspace = await this.workspaceRepository.findById(workspaceId);
+    if (!workspace) {
+      throw new AppError("Workspace not found", 404, "WORKSPACE_NOT_FOUND");
+    }
+
+    const member = workspace.members.find(
+      (m) => m.userId._id.toString() === userId,
+    );
+    if (!member) {
+      throw new AppError("Access denied. You are not a member of this workspace.", 403, "FORBIDDEN");
+    }
+
+    if (member.role === "owner" || workspace.ownerId.toString() === userId) {
+      throw new AppError("Access denied. Workspace owners cannot leave. Delete the workspace instead.", 400, "BAD_REQUEST");
+    }
+
+    await this.workspaceRepository.removeMember(workspaceId, userId);
   }
 }

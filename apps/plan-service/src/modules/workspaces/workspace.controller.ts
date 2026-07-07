@@ -129,4 +129,44 @@ export class WorkspaceController {
       next(error);
     }
   };
+
+  delete = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const workspaceId = req.params.id;
+      const userId = req.user?.userId;
+      if (!userId) {
+        res.status(401).json({ success: false, error: { message: "Unauthorized" } });
+        return;
+      }
+
+      await this.workspaceService.deleteWorkspace(workspaceId, userId);
+      res.status(200).json({ success: true, data: { message: "Workspace deleted successfully" } });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  leave = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const workspaceId = req.params.id;
+      const userId = req.user?.userId;
+      if (!userId) {
+        res.status(401).json({ success: false, error: { message: "Unauthorized" } });
+        return;
+      }
+
+      await this.workspaceService.leaveWorkspace(workspaceId, userId);
+      res.status(200).json({ success: true, data: { message: "Left workspace successfully" } });
+    } catch (error) {
+      next(error);
+    }
+  };
 }

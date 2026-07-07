@@ -57,6 +57,7 @@ export const App: React.FC = () => {
           >
             {/* Dashboard Workspace list */}
             <Route index element={<WorkspaceListPage />} />
+            <Route path="workspace/:workspaceId" element={<WorkspaceListPage />} />
             
             {/* Kanban Collaborative Board */}
             <Route path="plans/:planId" element={<KanbanBoard />} />

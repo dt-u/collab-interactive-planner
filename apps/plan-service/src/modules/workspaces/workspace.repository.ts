@@ -50,4 +50,24 @@ export class WorkspaceRepository {
       .populate("members.userId")
       .exec();
   }
+
+  async delete(workspaceId: string, session?: mongoose.ClientSession): Promise<void> {
+    await WorkspaceModel.findByIdAndDelete(workspaceId).session(session || null).exec();
+  }
+
+  async removeMember(
+    workspaceId: string,
+    userId: string,
+    session?: mongoose.ClientSession,
+  ): Promise<IWorkspace | null> {
+    return WorkspaceModel.findByIdAndUpdate(
+      workspaceId,
+      {
+        $pull: { members: { userId } },
+      },
+      { new: true, session },
+    )
+      .populate("members.userId")
+      .exec();
+  }
 }

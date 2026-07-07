@@ -17,6 +17,8 @@ router.post("/", validateBody(createWorkspaceRequestSchema), controller.create);
 router.get("/", controller.list);
 router.get("/:id", controller.get);
 router.patch("/:id", validateBody(updateWorkspaceRequestSchema), controller.update);
+router.delete("/:id", controller.delete);
+router.post("/:id/leave", controller.leave);
 router.post(
   "/:id/invite",
   validateBody(inviteMemberRequestSchema),
