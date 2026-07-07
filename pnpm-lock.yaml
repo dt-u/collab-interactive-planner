@@ -28,6 +28,9 @@ importers:
       '@collab-planner/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@collab-planner/realtime-protocol':
+        specifier: workspace:*
+        version: link:../../packages/realtime-protocol
       '@collab-planner/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -46,6 +49,9 @@ importers:
       google-auth-library:
         specifier: ^9.7.0
         version: 9.15.1
+      ioredis:
+        specifier: ^5.3.2
+        version: 5.11.1
       jsonwebtoken:
         specifier: ^9.0.2
         version: 9.0.3
@@ -171,6 +177,9 @@ importers:
       yjs:
         specifier: ^13.6.1
         version: 13.6.31
+      zustand:
+        specifier: ^4.5.2
+        version: 4.5.7(@types/react@18.3.31)(react@18.3.1)
     devDependencies:
       '@types/node':
         specifier: ^20.11.24
@@ -1890,6 +1899,11 @@ packages:
     peerDependencies:
       browserslist: '>= 4.21.0'
 
+  use-sync-external-store@1.6.0:
+    resolution: {integrity: sha512-Pp6GSwGP/NrPIrxVFAIkOQeyw8lFenOHijQWkUTrDvrF4ALqylP2C/KCkeS9dpUM3KvYRQhna5vt7IL95+ZQ9w==}
+    peerDependencies:
+      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+
   utils-merge@1.0.1:
     resolution: {integrity: sha512-pMZTvIkT1d+TFGvDOqodOclx0QWkkgi6Tdoa8gC8ffGAAqz9pzPTZWAybbsHHoED/ztMtkv/VoYTYyShUn81hA==}
     engines: {node: '>= 0.4.0'}
@@ -2033,6 +2047,21 @@ packages:
 
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
+
+  zustand@4.5.7:
+    resolution: {integrity: sha512-CHOUy7mu3lbD6o6LJLfllpjkzhHXSBlX8B9+qPddUsIfeF5S/UZ5q0kmCsnRqT1UHFQZchNFDDzMbQsuesHWlw==}
+    engines: {node: '>=12.7.0'}
+    peerDependencies:
+      '@types/react': '>=16.8'
+      immer: '>=9.0.6'
+      react: '>=16.8'
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+      immer:
+        optional: true
+      react:
+        optional: true
 
 snapshots:
 
@@ -3676,6 +3705,10 @@ snapshots:
       escalade: 3.2.0
       picocolors: 1.1.1
 
+  use-sync-external-store@1.6.0(react@18.3.1):
+    dependencies:
+      react: 18.3.1
+
   utils-merge@1.0.1: {}
 
   uuid@9.0.1: {}
@@ -3799,3 +3832,10 @@ snapshots:
   yocto-queue@1.2.2: {}
 
   zod@3.25.76: {}
+
+  zustand@4.5.7(@types/react@18.3.31)(react@18.3.1):
+    dependencies:
+      use-sync-external-store: 1.6.0(react@18.3.1)
+    optionalDependencies:
+      '@types/react': 18.3.31
+      react: 18.3.1

@@ -30,6 +30,17 @@ export interface ServerToClientEvents {
   "yjs:update": (payload: YjsUpdatePayload) => void;
   "awareness:update": (payload: AwarenessPayload) => void;
   "system:error": (payload: RealtimeErrorPayload) => void;
+  "notification:received": (payload: {
+    id: string;
+    recipientId: string;
+    senderId?: string;
+    type: string;
+    title: string;
+    content: string;
+    read: boolean;
+    metadata?: Record<string, any>;
+    createdAt: string;
+  }) => void;
 }
 
 export interface ClientToServerEvents {

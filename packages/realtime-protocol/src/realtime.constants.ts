@@ -5,3 +5,7 @@ export const REALTIME_CONSTANTS = {
   AWARENESS_THROTTLE_MS,
   SYNC_DEBOUNCE_MS,
 } as const;
+
+export const REDIS_CHANNELS = {
+  NOTIFICATIONS: "notifications:publish",
+} as const;
