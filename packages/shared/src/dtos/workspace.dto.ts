@@ -13,7 +13,7 @@ export const workspaceMemberSchema = z.object({
 export type WorkspaceMember = z.infer<typeof workspaceMemberSchema>;
 
 export const createWorkspaceRequestSchema = z.object({
-  name: z.string().min(2).max(100),
+  name: z.string().min(1).max(100),
 });
 export type CreateWorkspaceRequest = z.infer<
   typeof createWorkspaceRequestSchema

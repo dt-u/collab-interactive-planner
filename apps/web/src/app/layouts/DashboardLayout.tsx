@@ -17,7 +17,7 @@ export const DashboardLayout: React.FC = () => {
   const [newWorkspaceName, setNewWorkspaceName] = useState("");
   const [createLoading, setCreateLoading] = useState(false);
   const { workspaceId, planId } = useParams<{ workspaceId?: string; planId?: string }>();
-  const { activeWorkspaceId, setActiveWorkspaceId } = useWorkspaceStore();
+  const { activeWorkspaceId, setActiveWorkspaceId, workspaceListVersion, triggerWorkspaceListReload } = useWorkspaceStore();
 
   useEffect(() => {
     if (workspaceId) {
@@ -61,7 +61,7 @@ export const DashboardLayout: React.FC = () => {
       await httpClient.post("/workspaces", { name: newWorkspaceName });
       setNewWorkspaceName("");
       setShowNewWorkspaceModal(false);
-      await fetchWorkspaces();
+      triggerWorkspaceListReload();
     } catch (err) {
       console.error("Failed to create workspace:", err);
     } finally {
@@ -71,7 +71,7 @@ export const DashboardLayout: React.FC = () => {
 
   useEffect(() => {
     fetchWorkspaces();
-  }, []);
+  }, [workspaceListVersion]);
 
   return (
     <div className="app-layout">

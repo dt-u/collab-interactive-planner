@@ -38,11 +38,14 @@ describe("Shared Package - User DTOs Schemas", () => {
 });
 
 describe("Shared Package - Workspace DTOs Schemas", () => {
-  it("should validate workspace name between 2 and 100 characters", () => {
+  it("should validate workspace name between 1 and 100 characters", () => {
     const valid = { name: "My Team Workspace" };
     expect(createWorkspaceRequestSchema.safeParse(valid).success).toBe(true);
 
-    const tooShort = { name: "A" };
+    const validShort = { name: "A" };
+    expect(createWorkspaceRequestSchema.safeParse(validShort).success).toBe(true);
+
+    const tooShort = { name: "" };
     expect(createWorkspaceRequestSchema.safeParse(tooShort).success).toBe(
       false,
     );
