@@ -7,6 +7,7 @@ import { Spinner } from "../shared/ui/spinner/Spinner.js";
 import { DashboardLayout } from "./layouts/DashboardLayout.js";
 import { WorkspaceListPage } from "../features/workspaces/pages/WorkspaceListPage.js";
 import { KanbanBoard } from "../features/planner-board/components/KanbanBoard.js";
+import { NotificationsPage } from "../features/notifications/pages/NotificationsPage.js";
 
 // Layout import paths are mapped to correct files in later steps
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -58,6 +59,9 @@ export const App: React.FC = () => {
             {/* Dashboard Workspace list */}
             <Route index element={<WorkspaceListPage />} />
             <Route path="workspace/:workspaceId" element={<WorkspaceListPage />} />
+            
+            {/* Notifications & Invitations Page */}
+            <Route path="notifications" element={<NotificationsPage />} />
             
             {/* Kanban Collaborative Board */}
             <Route path="plans/:planId" element={<KanbanBoard />} />
