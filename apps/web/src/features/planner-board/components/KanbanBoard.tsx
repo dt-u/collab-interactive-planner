@@ -1688,14 +1688,14 @@ export const KanbanBoard: React.FC = () => {
             {/* HTML5 drawing canvas aligned with the infinite canvas bounds */}
             <canvas
               ref={drawingCanvasRef}
-              width={20000}
-              height={20000}
+              width={8000}
+              height={8000}
               style={{
                 position: "absolute",
-                top: "-10000px",
-                left: "-10000px",
-                width: "20000px",
-                height: "20000px",
+                top: "-4000px",
+                left: "-4000px",
+                width: "8000px",
+                height: "8000px",
                 background: "transparent",
                 backgroundColor: "transparent",
                 zIndex: activeTool !== "select" ? 25 : -1,
