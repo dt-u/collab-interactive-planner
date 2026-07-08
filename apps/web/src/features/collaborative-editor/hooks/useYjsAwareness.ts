@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { Socket } from "socket.io-client";
 import { getRandomCursorColor } from "@collab-planner/yjs-utils";
-import { SocketEvents, AwarenessState } from "@collab-planner/realtime-protocol";
+import { SocketEvents } from "@collab-planner/realtime-protocol";
+import * as Y from "yjs";
 
 export interface RemoteCursor {
   clientId: number;
@@ -17,16 +18,60 @@ export interface RemoteCursor {
   lastActive: number;
 }
 
+// Pure TypeScript implementation of the Yjs Awareness lifecycle API to eliminate Vite resolution issues
+class SimpleAwareness {
+  private listeners: Record<string, Function[]> = {};
+  public clientID: number;
+  public states: Map<number, any> = new Map();
+
+  constructor() {
+    this.clientID = Math.floor(Math.random() * 10000000);
+  }
+
+  on(event: string, callback: Function) {
+    if (!this.listeners[event]) this.listeners[event] = [];
+    this.listeners[event].push(callback);
+  }
+
+  off(event: string, callback: Function) {
+    if (!this.listeners[event]) return;
+    this.listeners[event] = this.listeners[event].filter(cb => cb !== callback);
+  }
+
+  emit(event: string, args: any[]) {
+    if (!this.listeners[event]) return;
+    this.listeners[event].forEach(cb => cb(...args));
+  }
+
+  getLocalState() {
+    return this.states.get(this.clientID) || null;
+  }
+
+  setLocalState(state: any) {
+    this.states.set(this.clientID, state);
+    this.emit("update", [{ added: [], updated: [this.clientID], removed: [] }, "local"]);
+    this.emit("change", [{ added: [], updated: [this.clientID], removed: [] }, "local"]);
+  }
+
+  getStates() {
+    return this.states;
+  }
+}
+
 export function useYjsAwareness(
   socket: Socket | null,
   docId: string | undefined,
   currentUser: { id: string; name: string; avatarUrl?: string } | null,
   containerRef: React.RefObject<HTMLElement>,
   pan: { x: number; y: number } = { x: 0, y: 0 },
-  zoom: number = 1
+  zoom: number = 1,
+  yDoc: Y.Doc | null = null
 ) {
   const [remoteCursors, setRemoteCursors] = useState<Record<number, RemoteCursor>>({});
   const throttledUpdateTimer = useRef<any>(null);
+
+  // Instantiate standard Yjs Awareness engine wrapper
+  const [awareness] = useState(() => new SimpleAwareness());
 
   // Store pan and zoom in refs to prevent event listener thrashing
   const panRef = useRef(pan);
@@ -37,59 +82,17 @@ export function useYjsAwareness(
     zoomRef.current = zoom;
   }, [pan, zoom]);
 
-  // Keep track of local state properties to merge them during updates
-  const localCursorRef = useRef<{ x: number; y: number } | undefined>(undefined);
-  const localFocusedItemRef = useRef<string | undefined>(undefined);
-  const localDraggingItemRef = useRef<string | undefined>(undefined);
-  const localDragProgressRef = useRef<{ itemId: string; type: string; x: number; y: number } | undefined>(undefined);
-
-  const getClientId = useCallback(() => {
-    if (!socket?.id) return 0;
-    let hash = 0;
-    for (let i = 0; i < socket.id.length; i++) {
-      hash = socket.id.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return Math.abs(hash);
-  }, [socket]);
-
-  // Clean up stale cursors (inactive for > 5 seconds)
+  // Track state changes via Standard Awareness change / update lifecycle listeners
   useEffect(() => {
-    const interval = setInterval(() => {
-      setRemoteCursors((prev) => {
-        const now = Date.now();
-        let changed = false;
-        const next = { ...prev };
-        
-        Object.entries(next).forEach(([idStr, cursor]) => {
-          if (now - cursor.lastActive > 5000) {
-            delete next[Number(idStr)];
-            changed = true;
-          }
-        });
+    const updatePresenceCallback = () => {
+      const states = awareness.getStates();
+      const cursors: Record<number, RemoteCursor> = {};
 
-        return changed ? next : prev;
-      });
-    }, 2000);
+      states.forEach((state: any, clientId: number) => {
+        if (clientId === awareness.clientID) return;
+        if (!state || !state.user) return;
 
-    return () => clearInterval(interval);
-  }, []);
-
-  // Set up socket awareness event listeners
-  useEffect(() => {
-    if (!socket || !docId) return;
-
-    const handleAwarenessUpdate = (payload: any) => {
-      if (payload.docId && payload.docId !== docId) return;
-      
-      const { clientId, state } = payload;
-      if (!state || !state.user) return;
-
-      // Skip self
-      if (clientId === getClientId()) return;
-
-      setRemoteCursors((prev) => ({
-        ...prev,
-        [clientId]: {
+        cursors[clientId] = {
           clientId,
           userId: state.user.userId,
           name: state.user.name,
@@ -101,22 +104,51 @@ export function useYjsAwareness(
           draggingItemId: state.draggingItemId,
           dragProgress: state.dragProgress,
           lastActive: Date.now(),
-        },
-      }));
+        };
+      });
+
+      setRemoteCursors(cursors);
+    };
+
+    awareness.on("change", updatePresenceCallback);
+    awareness.on("update", updatePresenceCallback);
+
+    return () => {
+      awareness.off("change", updatePresenceCallback);
+      awareness.off("update", updatePresenceCallback);
+    };
+  }, [awareness]);
+
+  // Sync awareness payload from socket to standard Yjs Awareness engine
+  useEffect(() => {
+    if (!socket || !docId) return;
+
+    const handleAwarenessUpdate = (payload: any) => {
+      if (payload.docId && payload.docId !== docId) return;
+      const { clientId, state } = payload;
+      if (clientId === awareness.clientID) return;
+
+      if (state === null || state === undefined) {
+        awareness.states.delete(clientId);
+      } else {
+        awareness.states.set(clientId, state);
+      }
+
+      // Explicitly trigger standard Yjs awareness lifecycle event emitter
+      awareness.emit("change", [{ added: [], updated: [clientId], removed: [] }, "remote"]);
     };
 
     const handleMemberLeft = (payload: { userId: string }) => {
-      setRemoteCursors((prev) => {
-        const next = { ...prev };
-        let changed = false;
-        Object.entries(next).forEach(([idStr, cursor]) => {
-          if (cursor.userId === payload.userId) {
-            delete next[Number(idStr)];
-            changed = true;
-          }
-        });
-        return changed ? next : prev;
+      let changed = false;
+      awareness.getStates().forEach((state: any, clientId: number) => {
+        if (state?.user?.userId === payload.userId) {
+          awareness.states.delete(clientId);
+          changed = true;
+        }
       });
+      if (changed) {
+        awareness.emit("change", [{ added: [], updated: [], removed: [] }, "remote"]);
+      }
     };
 
     socket.on(SocketEvents.AWARENESS_UPDATE, handleAwarenessUpdate);
@@ -126,59 +158,68 @@ export function useYjsAwareness(
       socket.off(SocketEvents.AWARENESS_UPDATE, handleAwarenessUpdate);
       socket.off(SocketEvents.MEMBER_LEFT, handleMemberLeft);
     };
-  }, [socket, docId, getClientId]);
+  }, [socket, docId, awareness]);
 
-  // Send local awareness updates (throttled)
+  // Send local awareness updates (non-destructively updating state keys)
   const sendLocalAwareness = useCallback(
-    (
-      cursorPos?: { x: number; y: number },
-      focusedItemId?: string,
-      draggingItemId?: string,
-      dragProgress?: { itemId: string; type: string; x: number; y: number } | null
-    ) => {
+    (overrides: {
+      cursor?: { x: number; y: number } | null;
+      focusedItemId?: string | null;
+      draggingItemId?: string | null;
+      dragProgress?: { itemId: string; type: string; x: number; y: number } | null;
+    }) => {
       if (!socket || !docId || !currentUser) return;
 
-      if (cursorPos !== undefined) localCursorRef.current = cursorPos;
-      if (focusedItemId !== undefined) localFocusedItemRef.current = focusedItemId;
-      if (draggingItemId !== undefined) localDraggingItemRef.current = draggingItemId;
-      if (dragProgress !== undefined) {
-        localDragProgressRef.current = dragProgress === null ? undefined : dragProgress;
-      }
-
-      const myClientId = getClientId();
       const userColor = getRandomCursorColor(currentUser.id);
-      
-      const state: any = {
+      const currentState = awareness.getLocalState() || {};
+
+      const nextCursor = overrides.cursor !== undefined
+        ? (overrides.cursor === null ? undefined : overrides.cursor)
+        : currentState.cursor;
+
+      const nextFocusedItemId = overrides.focusedItemId !== undefined
+        ? (overrides.focusedItemId === null ? undefined : overrides.focusedItemId)
+        : currentState.focusedItemId;
+
+      const nextDraggingItemId = overrides.draggingItemId !== undefined
+        ? (overrides.draggingItemId === null ? undefined : overrides.draggingItemId)
+        : currentState.draggingItemId;
+
+      const nextDragProgress = overrides.dragProgress !== undefined
+        ? (overrides.dragProgress === null ? undefined : overrides.dragProgress)
+        : currentState.dragProgress;
+
+      const state = {
         user: {
           userId: currentUser.id,
           name: currentUser.name,
           color: userColor,
           avatarUrl: currentUser.avatarUrl,
         },
-        cursor: localCursorRef.current ? {
-          x: localCursorRef.current.x,
-          y: localCursorRef.current.y,
-          name: currentUser.name,
-          color: userColor,
+        cursor: nextCursor ? {
+          x: nextCursor.x,
+          y: nextCursor.y,
         } : undefined,
-        focusedItemId: localFocusedItemRef.current,
-        draggingItemId: localDraggingItemRef.current,
-        dragProgress: localDragProgressRef.current,
+        focusedItemId: nextFocusedItemId,
+        draggingItemId: nextDraggingItemId,
+        dragProgress: nextDragProgress,
       };
+
+      awareness.setLocalState(state);
 
       socket.emit(SocketEvents.AWARENESS_UPDATE as any, {
         docId,
-        clientId: myClientId,
+        clientId: awareness.clientID,
         state,
       });
     },
-    [socket, docId, currentUser, getClientId]
+    [socket, docId, currentUser, awareness]
   );
 
   // Broadcast initial presence state immediately on mount or socket connection
   useEffect(() => {
     if (!socket || !docId || !currentUser) return;
-    sendLocalAwareness(undefined, undefined, undefined, undefined);
+    sendLocalAwareness({});
   }, [socket, docId, currentUser, sendLocalAwareness]);
 
   // Throttled mouse move listener
@@ -201,7 +242,7 @@ export function useYjsAwareness(
 
       if (timeSinceLast >= 50) {
         lastSent = now;
-        sendLocalAwareness({ x: normalizedX, y: normalizedY });
+        sendLocalAwareness({ cursor: { x: normalizedX, y: normalizedY } });
         if (throttledUpdateTimer.current) {
           clearTimeout(throttledUpdateTimer.current);
           throttledUpdateTimer.current = null;
@@ -212,7 +253,7 @@ export function useYjsAwareness(
           throttledUpdateTimer.current = setTimeout(() => {
             if (pendingPos) {
               lastSent = Date.now();
-              sendLocalAwareness(pendingPos);
+              sendLocalAwareness({ cursor: pendingPos });
               pendingPos = null;
             }
             throttledUpdateTimer.current = null;
@@ -233,21 +274,21 @@ export function useYjsAwareness(
 
   const updateFocusedItem = useCallback(
     (focusedItemId: string | undefined) => {
-      sendLocalAwareness(undefined, focusedItemId);
+      sendLocalAwareness({ focusedItemId: focusedItemId || null });
     },
     [sendLocalAwareness]
   );
 
   const updateDraggingItem = useCallback(
     (draggingItemId: string | undefined) => {
-      sendLocalAwareness(undefined, undefined, draggingItemId);
+      sendLocalAwareness({ draggingItemId: draggingItemId || null });
     },
     [sendLocalAwareness]
   );
 
   const updateDragProgress = useCallback(
     (dragProgress: { itemId: string; type: string; x: number; y: number } | undefined) => {
-      sendLocalAwareness(undefined, undefined, undefined, dragProgress === undefined ? null : dragProgress);
+      sendLocalAwareness({ dragProgress: dragProgress || null });
     },
     [sendLocalAwareness]
   );

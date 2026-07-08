@@ -63,13 +63,49 @@ const ColumnCardsContainer: React.FC<ColumnCardsContainerProps> = ({ colId, chil
   );
 };
 
-interface DraggableColumnHeaderProps {
+interface WhiteboardColumnProps {
   colId: string;
-  children: React.ReactNode;
+  index: number;
+  taskIds: string[];
+  columnTitle: string;
+  themeColor: "teal" | "purple" | "rose";
+  zoom: number;
+  localColPositions: Record<string, { x: number; y: number }>;
+  yDoc: Y.Doc | null | undefined;
+  activeId: string | null;
+  editingColumnId: string | null;
+  editingColumnTitle: string;
+  setEditingColumnTitle: (val: string) => void;
+  handleSaveColumnTitle: (colId: string) => void;
+  handleStartEditColumn: (colId: string, title: string) => void;
+  handleCreateTask: (colId: string) => void;
+  handleDeleteColumn: (colId: string) => void;
+  handleOpenTaskDetails: (taskId: string) => void;
+  handleDeleteTask: (taskId: string) => void;
+  remoteCursors: any[];
 }
 
-const DraggableColumnHeader: React.FC<DraggableColumnHeaderProps> = ({ colId, children }) => {
-  const { attributes, listeners, setNodeRef } = useDraggable({
+const WhiteboardColumn: React.FC<WhiteboardColumnProps> = ({
+  colId,
+  index,
+  taskIds,
+  columnTitle,
+  themeColor,
+  zoom,
+  localColPositions,
+  yDoc,
+  editingColumnId,
+  editingColumnTitle,
+  setEditingColumnTitle,
+  handleSaveColumnTitle,
+  handleStartEditColumn,
+  handleCreateTask,
+  handleDeleteColumn,
+  handleOpenTaskDetails,
+  handleDeleteTask,
+  remoteCursors,
+}) => {
+  const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: `col-header:${colId}`,
     data: {
       type: "COLUMN",
@@ -77,15 +113,157 @@ const DraggableColumnHeader: React.FC<DraggableColumnHeaderProps> = ({ colId, ch
     },
   });
 
+  const colPos = localColPositions[colId] || { x: index * 360, y: 0 };
+  const tx = transform ? transform.x / zoom : 0;
+  const ty = transform ? transform.y / zoom : 0;
+
+  // Cycle sorted items logic
+  const itemsMap = yDoc ? getSharedItems(yDoc) : null;
+  const sortedTaskIds = useMemo(() => {
+    return [...taskIds].sort((a, b) => {
+      if (!itemsMap) return 0;
+      const itemA = itemsMap.get(a) as Y.Map<any> | undefined;
+      const itemB = itemsMap.get(b) as Y.Map<any> | undefined;
+      const timeA = itemA?.get("time");
+      const timeB = itemB?.get("time");
+      return parseTimeToMinutes(timeA) - parseTimeToMinutes(timeB);
+    });
+  }, [taskIds, itemsMap]);
+
   return (
     <div
       ref={setNodeRef}
-      {...attributes}
-      {...listeners}
-      className="column-header-card"
-      style={{ cursor: "grab" }}
+      className="kanban-column-whiteboard"
+      style={{
+        position: "absolute",
+        left: `${colPos.x}px`,
+        top: `${colPos.y}px`,
+        transform: transform ? `translate3d(${tx}px, ${ty}px, 0)` : undefined,
+        width: "316px",
+        display: "flex",
+        flexDirection: "column",
+        gap: "14px",
+        zIndex: transform ? 30 : 1,
+      }}
     >
-      {children}
+      {/* Column Header */}
+      <div
+        className="column-header-card"
+        style={{ cursor: "grab" }}
+        {...attributes}
+        {...listeners}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, overflow: "hidden" }}>
+          <div className={`day-badge ${themeColor}`}>
+            D{index + 1}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {editingColumnId === colId ? (
+              <input
+                type="text"
+                value={editingColumnTitle}
+                onChange={(e) => setEditingColumnTitle(e.target.value)}
+                onBlur={() => handleSaveColumnTitle(colId)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSaveColumnTitle(colId);
+                }}
+                autoFocus
+                className="column-title-input-whiteboard"
+              />
+            ) : (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                <h3
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    handleStartEditColumn(colId, columnTitle);
+                  }}
+                  style={{ cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}
+                  title="Double click to rename"
+                >
+                  {columnTitle}
+                </h3>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleStartEditColumn(colId, columnTitle);
+                  }}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "#94a3b8",
+                    cursor: "pointer",
+                    padding: 2,
+                    display: "flex",
+                    alignItems: "center",
+                  }}
+                  title="Rename Day"
+                >
+                  <Edit2 size={12} />
+                </button>
+              </div>
+            )}
+            <p style={{ fontSize: 11, color: "#94a3b8", fontWeight: 500, marginTop: 2 }}>
+              {taskIds.length} {taskIds.length === 1 ? "Activity" : "Activities"}
+            </p>
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }} onClick={(e) => e.stopPropagation()}>
+          <button
+            className="create-task-inline-btn"
+            onClick={() => handleCreateTask(colId)}
+            title="Add Activity"
+          >
+            <Plus size={14} />
+          </button>
+          <button
+            className="create-task-inline-btn"
+            onClick={() => handleDeleteColumn(colId)}
+            title="Delete Day"
+            style={{ color: "#94a3b8" }}
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
+      </div>
+
+      {/* Cards Container with DND droppable registration */}
+      <SortableContext
+        items={sortedTaskIds}
+        strategy={verticalListSortingStrategy}
+      >
+        <ColumnCardsContainer colId={colId}>
+          {sortedTaskIds.map((taskId) => {
+            const focusingCollaborators = remoteCursors
+              .filter((c) => c.focusedItemId === taskId)
+              .map((c) => ({
+                name: c.name,
+                color: c.color,
+                avatarUrl: c.avatarUrl,
+              }));
+
+            return (
+              <BoardTaskCard
+                key={taskId}
+                taskId={taskId}
+                yDoc={yDoc || undefined}
+                onClick={() => handleOpenTaskDetails(taskId)}
+                focusingCollaborators={focusingCollaborators}
+                themeColor={themeColor}
+                onDelete={() => handleDeleteTask(taskId)}
+              />
+            );
+          })}
+        </ColumnCardsContainer>
+      </SortableContext>
+
+      {/* Dashed Column Add Plan Button */}
+      <button
+        className="add-plan-dashed-btn"
+        onClick={() => handleCreateTask(colId)}
+      >
+        <Plus size={16} />
+        <span>ADD PLAN</span>
+      </button>
     </div>
   );
 };
@@ -685,9 +863,10 @@ export const KanbanBoard: React.FC = () => {
     socket,
     planId,
     currentUser,
-    viewportRef,
+    canvasRef, // Use unscaled board canvas for precise geometric tracking
     pan,
-    zoom
+    zoom,
+    yDoc
   );
 
   // 6. Task Details Modal
@@ -1326,144 +1505,32 @@ export const KanbanBoard: React.FC = () => {
                 const metadata = columnMetadata[colId];
                 const columnTitle = metadata?.title || `DAY ${colId.toUpperCase()}`;
 
-                // Cycle color themes: teal, purple, rose
                 const themes: Array<"teal" | "purple" | "rose"> = ["teal", "purple", "rose"];
                 const themeColor = themes[index % 3];
 
-                // Dynamic local chronological sort by time
-                const itemsMap = getSharedItems(yDoc);
-                const sortedTaskIds = [...taskIds].sort((a, b) => {
-                  const itemA = itemsMap.get(a) as Y.Map<any> | undefined;
-                  const itemB = itemsMap.get(b) as Y.Map<any> | undefined;
-                  const timeA = itemA?.get("time");
-                  const timeB = itemB?.get("time");
-                  return parseTimeToMinutes(timeA) - parseTimeToMinutes(timeB);
-                });
-
-                const colPos = localColPositions[colId] || { x: index * 360, y: 0 };
-
                 return (
-                  <div
+                  <WhiteboardColumn
                     key={colId}
-                    className="kanban-column-whiteboard"
-                    style={{
-                      position: "absolute",
-                      left: `${colPos.x}px`,
-                      top: `${colPos.y}px`,
-                      width: "316px",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "14px"
-                    }}
-                  >
-                    {/* Floating Header Card */}
-                    <DraggableColumnHeader colId={colId}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, overflow: "hidden" }}>
-                        <div className={`day-badge ${themeColor}`}>
-                          D{index + 1}
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          {editingColumnId === colId ? (
-                            <input
-                              type="text"
-                              value={editingColumnTitle}
-                              onChange={(e) => setEditingColumnTitle(e.target.value)}
-                              onBlur={() => handleSaveColumnTitle(colId)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") handleSaveColumnTitle(colId);
-                              }}
-                              autoFocus
-                              className="column-title-input-whiteboard"
-                            />
-                          ) : (
-                            <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-                              <h3
-                                onDoubleClick={() => handleStartEditColumn(colId, columnTitle)}
-                                style={{ cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}
-                                title="Double click to rename"
-                              >
-                                {columnTitle}
-                              </h3>
-                              <button
-                                onClick={() => handleStartEditColumn(colId, columnTitle)}
-                                style={{
-                                  background: "transparent",
-                                  border: "none",
-                                  color: "#94a3b8",
-                                  cursor: "pointer",
-                                  padding: 2,
-                                  display: "flex",
-                                  alignItems: "center",
-                                }}
-                                title="Rename Day"
-                              >
-                                <Edit2 size={12} />
-                              </button>
-                            </div>
-                          )}
-                          <p style={{ fontSize: 11, color: "#94a3b8", fontWeight: 500, marginTop: 2 }}>
-                            {taskIds.length} {taskIds.length === 1 ? "Activity" : "Activities"}
-                          </p>
-                        </div>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                        <button
-                          className="create-task-inline-btn"
-                          onClick={() => handleCreateTask(colId)}
-                          title="Add Activity"
-                        >
-                          <Plus size={14} />
-                        </button>
-                        <button
-                          className="create-task-inline-btn"
-                          onClick={() => handleDeleteColumn(colId)}
-                          title="Delete Day"
-                          style={{ color: "#94a3b8" }}
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </DraggableColumnHeader>
-
-                    {/* Cards Container with DND droppable registration */}
-                    <SortableContext
-                      items={sortedTaskIds}
-                      strategy={verticalListSortingStrategy}
-                    >
-                      <ColumnCardsContainer colId={colId}>
-                        {sortedTaskIds.map((taskId) => {
-                          const focusingCollaborators = remoteCursors
-                            .filter((c) => c.focusedItemId === taskId)
-                            .map((c) => ({
-                              name: c.name,
-                              color: c.color,
-                              avatarUrl: c.avatarUrl,
-                            }));
-
-                          return (
-                            <BoardTaskCard
-                              key={taskId}
-                              taskId={taskId}
-                              yDoc={yDoc}
-                              onClick={() => handleOpenTaskDetails(taskId)}
-                              focusingCollaborators={focusingCollaborators}
-                              themeColor={themeColor}
-                              onDelete={() => handleDeleteTask(taskId)}
-                            />
-                          );
-                        })}
-                      </ColumnCardsContainer>
-                    </SortableContext>
-
-                    {/* Dashed Column Add Plan Button */}
-                    <button
-                      className="add-plan-dashed-btn"
-                      onClick={() => handleCreateTask(colId)}
-                    >
-                      <Plus size={16} />
-                      <span>ADD PLAN</span>
-                    </button>
-                  </div>
+                    colId={colId}
+                    index={index}
+                    taskIds={taskIds}
+                    columnTitle={columnTitle}
+                    themeColor={themeColor}
+                    zoom={zoom}
+                    localColPositions={localColPositions}
+                    yDoc={yDoc}
+                    activeId={activeId}
+                    editingColumnId={editingColumnId}
+                    editingColumnTitle={editingColumnTitle}
+                    setEditingColumnTitle={setEditingColumnTitle}
+                    handleSaveColumnTitle={handleSaveColumnTitle}
+                    handleStartEditColumn={handleStartEditColumn}
+                    handleCreateTask={handleCreateTask}
+                    handleDeleteColumn={handleDeleteColumn}
+                    handleOpenTaskDetails={handleOpenTaskDetails}
+                    handleDeleteTask={handleDeleteTask}
+                    remoteCursors={remoteCursors}
+                  />
                 );
               })}
 
