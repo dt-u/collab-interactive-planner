@@ -15,6 +15,8 @@ import {
   rectIntersection,
   pointerWithin,
   MeasuringStrategy,
+  useDraggable,
+  DragMoveEvent,
 } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { useAuth } from "../../../app/providers/AuthProvider.js";
@@ -56,6 +58,33 @@ const ColumnCardsContainer: React.FC<ColumnCardsContainerProps> = ({ colId, chil
   const { setNodeRef } = useDroppable({ id: colId });
   return (
     <div ref={setNodeRef} className="cards-container-whiteboard">
+      {children}
+    </div>
+  );
+};
+
+interface DraggableColumnHeaderProps {
+  colId: string;
+  children: React.ReactNode;
+}
+
+const DraggableColumnHeader: React.FC<DraggableColumnHeaderProps> = ({ colId, children }) => {
+  const { attributes, listeners, setNodeRef } = useDraggable({
+    id: `col-header:${colId}`,
+    data: {
+      type: "COLUMN",
+      colId,
+    },
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      className="column-header-card"
+      style={{ cursor: "grab" }}
+    >
       {children}
     </div>
   );
@@ -171,6 +200,37 @@ export const KanbanBoard: React.FC = () => {
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const spacePressed = useRef(false);
+
+  // Shared Yjs Map positions for day columns
+  const [colPositions, setColPositions] = useState<Record<string, { x: number; y: number }>>({});
+  const [localColPositions, setLocalColPositions] = useState<Record<string, { x: number; y: number }>>({});
+
+  // Synchronize columnPositions from Yjs Map observer
+  useEffect(() => {
+    if (!yDoc) return;
+    const colPosMap = yDoc.getMap("columnPositions");
+
+    const updatePositions = () => {
+      const current = colPosMap.toJSON() as Record<string, { x: number; y: number }>;
+      setColPositions(current);
+      // Only reset local positions to Yjs coordinates if user is not actively dragging columns locally
+      setLocalColPositions((prev) => {
+        const next = { ...prev };
+        Object.keys(current).forEach((colId) => {
+          if (activeId !== `col-header:${colId}`) {
+            next[colId] = current[colId];
+          }
+        });
+        return next;
+      });
+    };
+
+    updatePositions();
+    colPosMap.observe(updatePositions);
+    return () => {
+      colPosMap.unobserve(updatePositions);
+    };
+  }, [yDoc, activeId]);
 
   // Spacebar listeners for panning Mode
   useEffect(() => {
@@ -611,11 +671,13 @@ export const KanbanBoard: React.FC = () => {
   // 5. Awareness Layer (Tracking is scoped to the zoomed whiteboard viewport ref)
   const canvasRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
-  const { remoteCursors, updateFocusedItem } = useYjsAwareness(
+  const { remoteCursors, updateFocusedItem, updateDraggingItem } = useYjsAwareness(
     socket,
     planId,
     currentUser,
-    viewportRef // Setting the tracking viewport wrapper enables auto canvas coordinates mapping
+    viewportRef,
+    pan,
+    zoom
   );
 
   // 6. Task Details Modal
@@ -687,14 +749,65 @@ export const KanbanBoard: React.FC = () => {
   };
 
   const handleDragStart = (event: DragStartEvent) => {
+    const { active } = event;
+    const type = active.data.current?.type;
     setIsDraggingLocal(true);
-    setActiveId(event.active.id as string);
+    setActiveId(active.id as string);
+
+    if (type === "COLUMN") {
+      const colId = active.data.current?.colId;
+      if (colId) {
+        updateDraggingItem(colId);
+      }
+    } else {
+      updateDraggingItem(active.id as string);
+    }
+  };
+
+  const handleDragMove = (event: DragMoveEvent) => {
+    const { active, delta } = event;
+    if (active.data.current?.type === "COLUMN") {
+      const colId = active.data.current?.colId;
+      if (!colId) return;
+      const startPos = colPositions[colId] || {
+        x: columnOrder.indexOf(colId) * 360,
+        y: 0,
+      };
+      
+      // Update local React UI position overrides smoothly at 60fps
+      setLocalColPositions((prev) => ({
+        ...prev,
+        [colId]: {
+          x: startPos.x + delta.x / zoom,
+          y: startPos.y + delta.y / zoom,
+        },
+      }));
+    }
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
     setIsDraggingLocal(false);
     setActiveId(null);
-    const { active, over } = event;
+    updateDraggingItem(undefined);
+    const { active, delta, over } = event;
+
+    if (active.data.current?.type === "COLUMN") {
+      const colId = active.data.current?.colId;
+      if (!colId) return;
+      const startPos = colPositions[colId] || {
+        x: columnOrder.indexOf(colId) * 360,
+        y: 0,
+      };
+      
+      const finalX = startPos.x + delta.x / zoom;
+      const finalY = startPos.y + delta.y / zoom;
+      
+      if (yDoc) {
+        const colPosMap = yDoc.getMap("columnPositions");
+        colPosMap.set(colId, { x: finalX, y: finalY });
+      }
+      return;
+    }
 
     if (!over || !yDoc) return;
 
@@ -749,6 +862,8 @@ export const KanbanBoard: React.FC = () => {
   const handleDragCancel = () => {
     setIsDraggingLocal(false);
     setActiveId(null);
+    updateDraggingItem(undefined);
+    setLocalColPositions({ ...colPositions });
   };
 
   // Create Task Action
@@ -1136,6 +1251,7 @@ export const KanbanBoard: React.FC = () => {
         <DndContext
           sensors={sensors}
           onDragStart={handleDragStart}
+          onDragMove={handleDragMove}
           onDragEnd={handleDragEnd}
           onDragCancel={handleDragCancel}
           modifiers={[customCanvasScaleModifier]}
@@ -1178,10 +1294,24 @@ export const KanbanBoard: React.FC = () => {
                   return parseTimeToMinutes(timeA) - parseTimeToMinutes(timeB);
                 });
 
+                const colPos = localColPositions[colId] || { x: index * 360, y: 0 };
+
                 return (
-                  <div key={colId} className="kanban-column-whiteboard">
+                  <div
+                    key={colId}
+                    className="kanban-column-whiteboard"
+                    style={{
+                      position: "absolute",
+                      left: `${colPos.x}px`,
+                      top: `${colPos.y}px`,
+                      width: "316px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "14px"
+                    }}
+                  >
                     {/* Floating Header Card */}
-                    <div className="column-header-card">
+                    <DraggableColumnHeader colId={colId}>
                       <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, overflow: "hidden" }}>
                         <div className={`day-badge ${themeColor}`}>
                           D{index + 1}
@@ -1247,7 +1377,7 @@ export const KanbanBoard: React.FC = () => {
                           <Trash2 size={13} />
                         </button>
                       </div>
-                    </div>
+                    </DraggableColumnHeader>
 
                     {/* Cards Container with DND droppable registration */}
                     <SortableContext
@@ -1292,38 +1422,51 @@ export const KanbanBoard: React.FC = () => {
               })}
 
               {/* Add Column button */}
-              <button
-                onClick={handleAddColumn}
-                className="add-plan-dashed-btn"
-                style={{
-                  width: 320,
-                  height: 72,
-                  minHeight: 72,
-                  flexShrink: 0,
-                  fontSize: 13,
-                  fontWeight: 700,
-                  display: "flex",
-                  flexDirection: "row",
-                  gap: 8,
-                  borderStyle: "dashed",
-                }}
-              >
-                <Plus size={16} />
-                <span>Add Day / Milestone</span>
-              </button>
+              {(() => {
+                const lastColX = columnOrder.reduce((maxX, colId, idx) => {
+                  const pos = localColPositions[colId] || { x: idx * 360, y: 0 };
+                  return Math.max(maxX, pos.x);
+                }, -360);
+                const addBtnX = lastColX + 360;
+
+                return (
+                  <button
+                    onClick={handleAddColumn}
+                    className="add-plan-dashed-btn"
+                    style={{
+                      position: "absolute",
+                      left: `${addBtnX}px`,
+                      top: "0px",
+                      width: 320,
+                      height: 72,
+                      minHeight: 72,
+                      flexShrink: 0,
+                      fontSize: 13,
+                      fontWeight: 700,
+                      display: "flex",
+                      flexDirection: "row",
+                      gap: 8,
+                      borderStyle: "dashed",
+                    }}
+                  >
+                    <Plus size={16} />
+                    <span>Add Day / Milestone</span>
+                  </button>
+                );
+              })()}
             </div>
 
             {/* Remote Cursors Overlay (Inside viewport for proper scaling alignment) */}
             <div className="remote-cursor-layer" style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 40 }}>
               {remoteCursors
-                .filter((c) => c.x !== undefined && c.y !== undefined)
+                .filter((c) => c.x !== undefined && c.y !== undefined && !c.draggingItemId)
                 .map((c) => (
                   <div
                     key={c.clientId}
                     style={{
                       position: "absolute",
-                      left: `${c.x! * 100}%`,
-                      top: `${c.y! * 100}%`,
+                      left: `${c.x!}px`,
+                      top: `${c.y!}px`,
                       zIndex: 50,
                       pointerEvents: "none",
                       display: "flex",

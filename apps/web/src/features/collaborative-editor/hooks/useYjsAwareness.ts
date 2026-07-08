@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { Socket } from "socket.io-client";
 import { getRandomCursorColor } from "@collab-planner/yjs-utils";
-import { SocketEvents, AwarenessPayload, AwarenessState } from "@collab-planner/realtime-protocol";
+import { SocketEvents, AwarenessState } from "@collab-planner/realtime-protocol";
 
 export interface RemoteCursor {
   clientId: number;
@@ -9,9 +9,10 @@ export interface RemoteCursor {
   name: string;
   color: string;
   avatarUrl?: string;
-  x?: number; // 0 to 1
-  y?: number; // 0 to 1
+  x?: number; // absolute canvas space x coordinate
+  y?: number; // absolute canvas space y coordinate
   focusedItemId?: string;
+  draggingItemId?: string; // tracks remote user dragging status
   lastActive: number;
 }
 
@@ -19,11 +20,26 @@ export function useYjsAwareness(
   socket: Socket | null,
   docId: string | undefined,
   currentUser: { id: string; name: string; avatarUrl?: string } | null,
-  containerRef: React.RefObject<HTMLElement>
+  containerRef: React.RefObject<HTMLElement>,
+  pan: { x: number; y: number } = { x: 0, y: 0 },
+  zoom: number = 1
 ) {
   const [remoteCursors, setRemoteCursors] = useState<Record<number, RemoteCursor>>({});
   const throttledUpdateTimer = useRef<any>(null);
-  const lastUpdateTimes = useRef<Record<number, number>>({});
+
+  // Store pan and zoom in refs to prevent event listener thrashing
+  const panRef = useRef(pan);
+  const zoomRef = useRef(zoom);
+
+  useEffect(() => {
+    panRef.current = pan;
+    zoomRef.current = zoom;
+  }, [pan, zoom]);
+
+  // Keep track of local state properties to merge them during updates
+  const localCursorRef = useRef<{ x: number; y: number } | undefined>(undefined);
+  const localFocusedItemRef = useRef<string | undefined>(undefined);
+  const localDraggingItemRef = useRef<string | undefined>(undefined);
 
   const getClientId = useCallback(() => {
     if (!socket?.id) return 0;
@@ -61,8 +77,6 @@ export function useYjsAwareness(
     if (!socket || !docId) return;
 
     const handleAwarenessUpdate = (payload: any) => {
-      // payload structure matches ClientToServerEvents["awareness:update"]
-      // but payload has docId on the server broadcast
       if (payload.docId && payload.docId !== docId) return;
       
       const { clientId, state } = payload;
@@ -82,6 +96,7 @@ export function useYjsAwareness(
           x: state.cursor?.x,
           y: state.cursor?.y,
           focusedItemId: state.focusedItemId,
+          draggingItemId: state.draggingItemId,
           lastActive: Date.now(),
         },
       }));
@@ -112,19 +127,31 @@ export function useYjsAwareness(
 
   // Send local awareness updates (throttled)
   const sendLocalAwareness = useCallback(
-    (cursorPos?: { x: number; y: number }, focusedItemId?: string) => {
+    (cursorPos?: { x: number; y: number }, focusedItemId?: string, draggingItemId?: string) => {
       if (!socket || !docId || !currentUser) return;
 
+      if (cursorPos !== undefined) localCursorRef.current = cursorPos;
+      if (focusedItemId !== undefined) localFocusedItemRef.current = focusedItemId;
+      if (draggingItemId !== undefined) localDraggingItemRef.current = draggingItemId;
+
       const myClientId = getClientId();
-      const state: AwarenessState = {
+      const userColor = getRandomCursorColor(currentUser.id);
+      
+      const state: any = {
         user: {
           userId: currentUser.id,
           name: currentUser.name,
-          color: getRandomCursorColor(currentUser.id),
+          color: userColor,
           avatarUrl: currentUser.avatarUrl,
         },
-        cursor: cursorPos,
-        focusedItemId,
+        cursor: localCursorRef.current ? {
+          x: localCursorRef.current.x,
+          y: localCursorRef.current.y,
+          name: currentUser.name,
+          color: userColor,
+        } : undefined,
+        focusedItemId: localFocusedItemRef.current,
+        draggingItemId: localDraggingItemRef.current,
       };
 
       socket.emit(SocketEvents.AWARENESS_UPDATE as any, {
@@ -146,25 +173,23 @@ export function useYjsAwareness(
 
     const handleMouseMove = (e: MouseEvent) => {
       const rect = container.getBoundingClientRect();
-      const relativeX = (e.clientX - rect.left) / rect.width;
-      const relativeY = (e.clientY - rect.top) / rect.height;
-
-      // Clamp coordinates between 0 and 1
-      const x = Math.max(0, Math.min(1, relativeX));
-      const y = Math.max(0, Math.min(1, relativeY));
+      
+      // client coordinate normalization math relative to pan & zoom
+      const normalizedX = (e.clientX - rect.left - panRef.current.x) / zoomRef.current;
+      const normalizedY = (e.clientY - rect.top - panRef.current.y) / zoomRef.current;
 
       const now = Date.now();
       const timeSinceLast = now - lastSent;
 
       if (timeSinceLast >= 50) {
         lastSent = now;
-        sendLocalAwareness({ x, y });
+        sendLocalAwareness({ x: normalizedX, y: normalizedY });
         if (throttledUpdateTimer.current) {
           clearTimeout(throttledUpdateTimer.current);
           throttledUpdateTimer.current = null;
         }
       } else {
-        pendingPos = { x, y };
+        pendingPos = { x: normalizedX, y: normalizedY };
         if (!throttledUpdateTimer.current) {
           throttledUpdateTimer.current = setTimeout(() => {
             if (pendingPos) {
@@ -178,10 +203,10 @@ export function useYjsAwareness(
       }
     };
 
-    container.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mousemove", handleMouseMove);
 
     return () => {
-      container.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mousemove", handleMouseMove);
       if (throttledUpdateTimer.current) {
         clearTimeout(throttledUpdateTimer.current);
       }
@@ -195,8 +220,16 @@ export function useYjsAwareness(
     [sendLocalAwareness]
   );
 
+  const updateDraggingItem = useCallback(
+    (draggingItemId: string | undefined) => {
+      sendLocalAwareness(undefined, undefined, draggingItemId);
+    },
+    [sendLocalAwareness]
+  );
+
   return {
     remoteCursors: Object.values(remoteCursors),
     updateFocusedItem,
+    updateDraggingItem,
   };
 }
