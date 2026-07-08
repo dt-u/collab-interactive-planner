@@ -7,6 +7,7 @@ import {
   useSensor,
   useSensors,
   PointerSensor,
+  TouchSensor,
   DragStartEvent,
   DragEndEvent,
   useDroppable,
@@ -24,6 +25,7 @@ import { useJoinPlannerRoom } from "../../realtime/hooks/useJoinPlannerRoom.js";
 import { SocketIoYjsProvider } from "../../collaborative-editor/yjs/socket-io-yjs-provider.js";
 import { useYjsColumns } from "../../collaborative-editor/hooks/useYjsDocument.js";
 import { useYjsAwareness } from "../../collaborative-editor/hooks/useYjsAwareness.js";
+import { useDrawingPaths } from "../../collaborative-editor/hooks/useDrawingPaths.js";
 import {
   getSharedColumns,
   getSharedItems,
@@ -34,7 +36,7 @@ import {
 import { httpClient } from "../../../shared/api/http-client.js";
 import { BoardTaskCard } from "./BoardTaskCard.js";
 import { TaskDetailModal } from "./TaskDetailModal.js";
-import { Plus, ArrowLeft, Trash2, X, Copy, MapPin, Menu, Settings, Edit2, CheckCircle2, AlertCircle, Crosshair } from "lucide-react";
+import { Plus, ArrowLeft, Trash2, X, Copy, MapPin, Menu, Settings, Edit2, CheckCircle2, AlertCircle, Crosshair, MousePointer } from "lucide-react";
 import { Spinner } from "../../../shared/ui/spinner/Spinner.js";
 
 interface ColumnCardsContainerProps {
@@ -370,9 +372,11 @@ export const KanbanBoard: React.FC = () => {
   const { columns, columnOrder, columnMetadata } = useYjsColumns(yDoc, isDraggingLocal);
 
   // Read sidebar toggle state from layout context
-  const { isSidebarCollapsed, toggleSidebar } = useOutletContext<{
+  const { isSidebarCollapsed, toggleSidebar, isMobile, setIsMobileDrawerOpen } = useOutletContext<{
     isSidebarCollapsed: boolean;
     toggleSidebar: () => void;
+    isMobile: boolean;
+    setIsMobileDrawerOpen: (val: boolean) => void;
   }>();
 
   // Figma-Style Pan & Zoom
@@ -381,6 +385,20 @@ export const KanbanBoard: React.FC = () => {
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const spacePressed = useRef(false);
+
+  // Collaborative Drawing States
+  const [activeTool, setActiveTool] = useState<"select" | "brush" | "eraser">("select");
+  const [brushColor, setBrushColor] = useState("#38bdf8");
+  const [brushSize, setBrushSize] = useState(6);
+  const drawingCanvasRef = useRef<HTMLCanvasElement>(null);
+
+  const { startDrawing, drawMove, endDrawing } = useDrawingPaths(
+    yDoc,
+    drawingCanvasRef,
+    activeTool,
+    brushColor,
+    brushSize
+  );
 
   // Shared Yjs Map positions for day columns
   const [colPositions, setColPositions] = useState<Record<string, { x: number; y: number }>>({});
@@ -412,6 +430,107 @@ export const KanbanBoard: React.FC = () => {
       colPosMap.unobserve(updatePositions);
     };
   }, [yDoc, activeId]);
+
+  const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (activeTool === "select") return;
+    const canvas = drawingCanvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / zoom;
+    const y = (e.clientY - rect.top) / zoom;
+    startDrawing(x, y);
+  };
+
+  const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (activeTool === "select") return;
+    const canvas = drawingCanvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / zoom;
+    const y = (e.clientY - rect.top) / zoom;
+    drawMove(x, y);
+  };
+
+  const handleCanvasMouseUp = () => {
+    endDrawing();
+  };
+
+  // Touch viewport controls refs
+  const touchStartDist = useRef<number | null>(null);
+  const touchStartZoom = useRef<number>(1);
+  const touchStartPan = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const touchStartMid = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      const target = touch.target as HTMLElement;
+
+      // Skip background panning if touching columns or cards
+      if (
+        target.closest(".kanban-column-whiteboard") ||
+        target.closest(".column-header-card") ||
+        target.closest(".task-card-wrapper") ||
+        target.closest(".add-plan-dashed-btn")
+      ) {
+        return;
+      }
+
+      setIsPanning(true);
+      setPanStart({
+        x: touch.clientX - pan.x,
+        y: touch.clientY - pan.y,
+      });
+    } else if (e.touches.length === 2) {
+      const touch1 = e.touches[0];
+      const touch2 = e.touches[1];
+
+      const dist = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
+      touchStartDist.current = dist;
+      touchStartZoom.current = zoom;
+      touchStartPan.current = pan;
+
+      const midX = (touch1.clientX + touch2.clientX) / 2;
+      const midY = (touch1.clientY + touch2.clientY) / 2;
+      touchStartMid.current = { x: midX, y: midY };
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 1 && isPanning) {
+      const touch = e.touches[0];
+      setPan({
+        x: touch.clientX - panStart.x,
+        y: touch.clientY - panStart.y,
+      });
+    } else if (e.touches.length === 2 && touchStartDist.current !== null) {
+      const touch1 = e.touches[0];
+      const touch2 = e.touches[1];
+
+      const dist = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
+      const scaleChange = dist / touchStartDist.current;
+      const nextZoom = Math.min(Math.max(touchStartZoom.current * scaleChange, 0.15), 3);
+
+      const mid = touchStartMid.current;
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (rect) {
+        const pivotX = mid.x - rect.left;
+        const pivotY = mid.y - rect.top;
+
+        const factor = nextZoom / touchStartZoom.current;
+        setZoom(nextZoom);
+        setPan({
+          x: mid.x - pivotX * factor,
+          y: mid.y - pivotY * factor,
+        });
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setIsPanning(false);
+    touchStartDist.current = null;
+  };
 
   // Spacebar listeners for panning Mode
   useEffect(() => {
@@ -885,11 +1004,16 @@ export const KanbanBoard: React.FC = () => {
     updateFocusedItem(undefined);
   };
 
-  // 7. Drag-and-Drop Sensors configuration
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
         distance: 4,
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 200,
+        tolerance: 5,
       },
     })
   );
@@ -1275,9 +1399,15 @@ export const KanbanBoard: React.FC = () => {
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
-            {isSidebarCollapsed && (
+            {(isSidebarCollapsed || isMobile) && (
               <button
-                onClick={toggleSidebar}
+                onClick={() => {
+                  if (isMobile) {
+                    setIsMobileDrawerOpen(true);
+                  } else {
+                    toggleSidebar();
+                  }
+                }}
                 style={{
                   background: "transparent",
                   border: "none",
@@ -1288,7 +1418,7 @@ export const KanbanBoard: React.FC = () => {
                   alignItems: "center",
                   marginRight: 4
                 }}
-                title="Expand Sidebar"
+                title={isMobile ? "Open Navigation" : "Expand Sidebar"}
               >
                 <Menu size={18} />
               </button>
@@ -1474,7 +1604,13 @@ export const KanbanBoard: React.FC = () => {
         onMouseMove={handleMouseMovePan}
         onMouseUp={handleMouseUp}
         onWheel={handleWheel}
-        style={{ cursor: isPanning ? "grabbing" : spacePressed.current ? "grab" : "default" }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        style={{
+          cursor: isPanning ? "grabbing" : spacePressed.current ? "grab" : "default",
+          touchAction: "none",
+        }}
       >
         <DndContext
           sensors={sensors}
@@ -1486,7 +1622,6 @@ export const KanbanBoard: React.FC = () => {
           collisionDetection={customCollisionDetection}
           measuring={dndMeasuringConfig}
         >
-          {/* Transforming viewport containing columns & nested cursors layer */}
           <div
             ref={viewportRef}
             className="whiteboard-viewport"
@@ -1502,6 +1637,27 @@ export const KanbanBoard: React.FC = () => {
               position: "relative",
             }}
           >
+            {/* HTML5 drawing canvas aligned with the infinite canvas bounds */}
+            <canvas
+              ref={drawingCanvasRef}
+              width={5000}
+              height={3000}
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: "5000px",
+                height: "3000px",
+                zIndex: activeTool !== "select" ? 25 : -1,
+                pointerEvents: activeTool !== "select" ? "auto" : "none",
+                cursor: activeTool === "brush" ? "crosshair" : activeTool === "eraser" ? "cell" : "default",
+              }}
+              onMouseDown={handleCanvasMouseDown}
+              onMouseMove={handleCanvasMouseMove}
+              onMouseUp={handleCanvasMouseUp}
+              onMouseLeave={handleCanvasMouseUp}
+            />
+
             <div className="board-columns-list">
               {columnOrder.map((colId, index) => {
                 const taskIds = columns[colId] || [];
@@ -1842,6 +1998,194 @@ export const KanbanBoard: React.FC = () => {
           >
             <Crosshair size={14} />
           </button>
+        </div>
+
+        {/* Floating Drawing Toolbar */}
+        <div
+          className="hidden md:flex"
+          style={{
+            position: "absolute",
+            top: 24,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 60,
+            backgroundColor: "rgba(15, 23, 42, 0.75)",
+            backdropFilter: "blur(12px)",
+            border: "1px solid rgba(255, 255, 255, 0.08)",
+            borderRadius: 16,
+            padding: "8px 16px",
+            alignItems: "center",
+            gap: 16,
+            boxShadow: "0 8px 32px rgba(0, 0, 0, 0.4)",
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          {/* Pointer Selector */}
+          <button
+            onClick={() => setActiveTool("select")}
+            style={{
+              background: activeTool === "select" ? "rgba(255, 255, 255, 0.12)" : "transparent",
+              border: "none",
+              borderRadius: 8,
+              padding: 8,
+              color: activeTool === "select" ? "#38bdf8" : "#94a3b8",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "all 0.2s",
+            }}
+            title="Select Tool"
+          >
+            <MousePointer size={18} />
+          </button>
+
+          {/* Brush Tool */}
+          <button
+            onClick={() => setActiveTool("brush")}
+            style={{
+              background: activeTool === "brush" ? "rgba(255, 255, 255, 0.12)" : "transparent",
+              border: "none",
+              borderRadius: 8,
+              padding: 8,
+              color: activeTool === "brush" ? "#38bdf8" : "#94a3b8",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "all 0.2s",
+            }}
+            title="Brush Tool"
+          >
+            <Edit2 size={18} />
+          </button>
+
+          {/* Eraser Tool */}
+          <button
+            onClick={() => setActiveTool("eraser")}
+            style={{
+              background: activeTool === "eraser" ? "rgba(255, 255, 255, 0.12)" : "transparent",
+              border: "none",
+              borderRadius: 8,
+              padding: 8,
+              color: activeTool === "eraser" ? "#38bdf8" : "#94a3b8",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "all 0.2s",
+            }}
+            title="Eraser Tool"
+          >
+            <Trash2 size={18} />
+          </button>
+
+          {/* Color Picker Swatches */}
+          {activeTool === "brush" && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, borderLeft: "1px solid rgba(255, 255, 255, 0.1)", paddingLeft: 16 }}>
+              {["#38bdf8", "#f43f5e", "#10b981", "#fbbf24", "#a855f7"].map((color) => (
+                <button
+                  key={color}
+                  onClick={() => setBrushColor(color)}
+                  style={{
+                    width: 18,
+                    height: 18,
+                    borderRadius: "50%",
+                    backgroundColor: color,
+                    border: brushColor === color ? "2px solid white" : "none",
+                    cursor: "pointer",
+                    padding: 0,
+                    transform: brushColor === color ? "scale(1.15)" : "none",
+                    transition: "all 0.15s",
+                  }}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Brush Size Slider */}
+          {activeTool === "brush" && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, borderLeft: "1px solid rgba(255, 255, 255, 0.1)", paddingLeft: 16 }}>
+              <span style={{ fontSize: 11, color: "#94a3b8" }}>Size:</span>
+              <input
+                type="range"
+                min={2}
+                max={24}
+                value={brushSize}
+                onChange={(e) => setBrushSize(Number(e.target.value))}
+                style={{
+                  width: 72,
+                  accentColor: "#38bdf8",
+                  cursor: "pointer",
+                }}
+              />
+              <span style={{ fontSize: 11, color: "#94a3b8", width: 14 }}>{brushSize}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Floating Whiteboard Minimap Container */}
+        <div
+          className="hidden md:flex"
+          style={{
+            position: "absolute",
+            bottom: 80,
+            left: 24,
+            width: 180,
+            height: 108,
+            background: "var(--glass-bg)",
+            border: "1px solid var(--glass-border)",
+            borderRadius: 12,
+            boxShadow: "var(--glass-shadow)",
+            backdropFilter: "blur(10px)",
+            zIndex: 30,
+            overflow: "hidden",
+            pointerEvents: "none",
+          }}
+        >
+          <div style={{ position: "relative", width: "100%", height: "100%" }}>
+            {columnOrder.map((colId, idx) => {
+              const pos = localColPositions[colId] || { x: idx * 360, y: 0 };
+              return (
+                <div
+                  key={`mini-col-${colId}`}
+                  style={{
+                    position: "absolute",
+                    left: `${pos.x * 0.036}px`,
+                    top: `${pos.y * 0.036}px`,
+                    width: `${316 * 0.036}px`,
+                    height: `${600 * 0.036}px`,
+                    backgroundColor: "rgba(99, 102, 241, 0.2)",
+                    border: "1px solid rgba(99, 102, 241, 0.4)",
+                    borderRadius: 2,
+                  }}
+                />
+              );
+            })}
+
+            {(() => {
+              const visibleLeft = (-pan.x / zoom) * 0.036;
+              const visibleTop = (-pan.y / zoom) * 0.036;
+              const visibleWidth = (window.innerWidth / zoom) * 0.036;
+              const visibleHeight = (window.innerHeight / zoom) * 0.036;
+
+              return (
+                <div
+                  style={{
+                    position: "absolute",
+                    left: `${visibleLeft}px`,
+                    top: `${visibleTop}px`,
+                    width: `${visibleWidth}px`,
+                    height: `${visibleHeight}px`,
+                    border: "1.5px solid #38bdf8",
+                    backgroundColor: "rgba(56, 189, 248, 0.08)",
+                    borderRadius: 2,
+                  }}
+                />
+              );
+            })()}
+          </div>
         </div>
       </div>
 

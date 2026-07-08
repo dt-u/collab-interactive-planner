@@ -68,7 +68,23 @@ export const DashboardLayout: React.FC = () => {
     return localStorage.getItem("sidebar_collapsed") === "true";
   });
 
+  const [isMobile, setIsMobile] = useState(false);
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+
   const toggleSidebar = () => {
+    if (isMobile) {
+      setIsMobileDrawerOpen((prev) => !prev);
+      return;
+    }
     setIsSidebarCollapsed((prev) => {
       const next = !prev;
       localStorage.setItem("sidebar_collapsed", String(next));
@@ -111,8 +127,39 @@ export const DashboardLayout: React.FC = () => {
 
   return (
     <div className="app-layout">
+      {/* Mobile Drawer Backdrop Overlay */}
+      {isMobile && isMobileDrawerOpen && (
+        <div
+          onClick={() => setIsMobileDrawerOpen(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(15, 23, 42, 0.6)",
+            backdropFilter: "blur(4px)",
+            zIndex: 90,
+          }}
+        />
+      )}
+
       {/* 1. Sidebar Navigation */}
-      <aside className={`app-sidebar ${isSidebarCollapsed ? "collapsed" : ""}`}>
+      <aside
+        className={`app-sidebar ${isSidebarCollapsed ? "collapsed" : ""}`}
+        style={
+          isMobile
+            ? {
+                position: "fixed",
+                top: 0,
+                left: 0,
+                bottom: 0,
+                height: "100%",
+                zIndex: 100,
+                transform: isMobileDrawerOpen ? "translateX(0)" : "translateX(-100%)",
+                transition: "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                width: "260px",
+              }
+            : undefined
+        }
+      >
         <div className="sidebar-brand" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, overflow: "hidden" }}>
             <span className="brand-icon">PU</span>
@@ -141,6 +188,9 @@ export const DashboardLayout: React.FC = () => {
         <nav className="sidebar-nav">
           <Link
             to="/"
+            onClick={() => {
+              if (isMobile) setIsMobileDrawerOpen(false);
+            }}
             className={`nav-item ${location.pathname === "/" ? "active" : ""}`}
           >
             <LayoutDashboard size={18} />
@@ -162,6 +212,7 @@ export const DashboardLayout: React.FC = () => {
                   onClick={() => {
                     setActiveWorkspaceId(ws.id);
                     navigate(`/workspace/${ws.id}`);
+                    if (isMobile) setIsMobileDrawerOpen(false);
                   }}
                   style={{ cursor: "pointer" }}
                 >
@@ -269,7 +320,7 @@ export const DashboardLayout: React.FC = () => {
         )}
 
         <main className={`app-main ${planId ? "whiteboard-mode" : ""}`} style={planId ? { height: "100%", padding: 0, overflow: "hidden" } : undefined}>
-          <Outlet context={{ isSidebarCollapsed, toggleSidebar }} />
+          <Outlet context={{ isSidebarCollapsed, toggleSidebar, isMobile, isMobileDrawerOpen, setIsMobileDrawerOpen }} />
         </main>
       </div>
 
