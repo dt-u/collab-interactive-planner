@@ -36,7 +36,7 @@ import {
 import { httpClient } from "../../../shared/api/http-client.js";
 import { BoardTaskCard } from "./BoardTaskCard.js";
 import { TaskDetailModal } from "./TaskDetailModal.js";
-import { Plus, ArrowLeft, Trash2, X, Copy, MapPin, Menu, Settings, Edit2, CheckCircle2, AlertCircle, Crosshair, MousePointer } from "lucide-react";
+import { Plus, ArrowLeft, Trash2, X, Copy, MapPin, Menu, Settings, Edit2, CheckCircle2, AlertCircle, Crosshair, MousePointer, Eraser } from "lucide-react";
 import { Spinner } from "../../../shared/ui/spinner/Spinner.js";
 
 interface ColumnCardsContainerProps {
@@ -391,6 +391,7 @@ export const KanbanBoard: React.FC = () => {
   const [brushColor, setBrushColor] = useState("#38bdf8");
   const [brushSize, setBrushSize] = useState(6);
   const drawingCanvasRef = useRef<HTMLCanvasElement>(null);
+  const minimapDragStart = useRef<{ x: number; y: number; pan: { x: number; y: number } } | null>(null);
 
   const { startDrawing, drawMove, endDrawing } = useDrawingPaths(
     yDoc,
@@ -433,6 +434,7 @@ export const KanbanBoard: React.FC = () => {
 
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (activeTool === "select") return;
+    if (e.buttons !== 1) return;
     const canvas = drawingCanvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
@@ -443,6 +445,7 @@ export const KanbanBoard: React.FC = () => {
 
   const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (activeTool === "select") return;
+    if (e.buttons !== 1) return;
     const canvas = drawingCanvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
@@ -530,6 +533,51 @@ export const KanbanBoard: React.FC = () => {
   const handleTouchEnd = () => {
     setIsPanning(false);
     touchStartDist.current = null;
+  };
+
+  const handleMinimapClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (minimapDragStart.current) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+
+    const canvasX = clickX / 0.036;
+    const canvasY = clickY / 0.036;
+
+    setPan({
+      x: window.innerWidth / 2 - canvasX * zoom,
+      y: window.innerHeight / 2 - canvasY * zoom,
+    });
+  };
+
+  const handleMinimapPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    minimapDragStart.current = {
+      x: e.clientX,
+      y: e.clientY,
+      pan: { ...pan },
+    };
+  };
+
+  const handleMinimapPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!minimapDragStart.current) return;
+    e.stopPropagation();
+
+    const dx = e.clientX - minimapDragStart.current.x;
+    const dy = e.clientY - minimapDragStart.current.y;
+
+    setPan({
+      x: minimapDragStart.current.pan.x - (dx / 0.036) * zoom,
+      y: minimapDragStart.current.pan.y - (dy / 0.036) * zoom,
+    });
+  };
+
+  const handleMinimapPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (minimapDragStart.current) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+      minimapDragStart.current = null;
+    }
   };
 
   // Spacebar listeners for panning Mode
@@ -2005,7 +2053,7 @@ export const KanbanBoard: React.FC = () => {
           className="hidden md:flex"
           style={{
             position: "absolute",
-            top: 24,
+            bottom: 24,
             left: "50%",
             transform: "translateX(-50%)",
             zIndex: 60,
@@ -2078,7 +2126,7 @@ export const KanbanBoard: React.FC = () => {
             }}
             title="Eraser Tool"
           >
-            <Trash2 size={18} />
+            <Eraser size={18} />
           </button>
 
           {/* Color Picker Swatches */}
@@ -2141,10 +2189,12 @@ export const KanbanBoard: React.FC = () => {
             backdropFilter: "blur(10px)",
             zIndex: 30,
             overflow: "hidden",
-            pointerEvents: "none",
+            cursor: "pointer",
+            pointerEvents: "auto",
           }}
+          onClick={handleMinimapClick}
         >
-          <div style={{ position: "relative", width: "100%", height: "100%" }}>
+          <div style={{ position: "relative", width: "100%", height: "100%", pointerEvents: "none" }}>
             {columnOrder.map((colId, idx) => {
               const pos = localColPositions[colId] || { x: idx * 360, y: 0 };
               return (
@@ -2181,7 +2231,12 @@ export const KanbanBoard: React.FC = () => {
                     border: "1.5px solid #38bdf8",
                     backgroundColor: "rgba(56, 189, 248, 0.08)",
                     borderRadius: 2,
+                    cursor: "grab",
+                    pointerEvents: "auto",
                   }}
+                  onPointerDown={handleMinimapPointerDown}
+                  onPointerMove={handleMinimapPointerMove}
+                  onPointerUp={handleMinimapPointerUp}
                 />
               );
             })()}
