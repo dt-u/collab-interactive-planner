@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { Socket } from "socket.io-client";
 import { getRandomCursorColor } from "@collab-planner/yjs-utils";
 import { SocketEvents } from "@collab-planner/realtime-protocol";
-import * as Y from "yjs";
+import { SocketIoYjsProvider } from "../yjs/socket-io-yjs-provider.js";
 
 export interface RemoteCursor {
   clientId: number;
@@ -10,155 +10,47 @@ export interface RemoteCursor {
   name: string;
   color: string;
   avatarUrl?: string;
-  x?: number; // absolute canvas space x coordinate
-  y?: number; // absolute canvas space y coordinate
+  x?: number; // relative percentage canvas x coordinate
+  y?: number; // relative percentage canvas y coordinate
   focusedItemId?: string;
   draggingItemId?: string; // tracks remote user dragging status
   dragProgress?: { itemId: string; type: string; x: number; y: number }; // remote user drag progress
   lastActive: number;
 }
 
-// Pure TypeScript implementation of the Yjs Awareness lifecycle API to eliminate Vite resolution issues
-class SimpleAwareness {
-  private listeners: Record<string, Function[]> = {};
-  public clientID: number;
-  public states: Map<number, any> = new Map();
-
-  constructor() {
-    this.clientID = Math.floor(Math.random() * 10000000);
-  }
-
-  on(event: string, callback: Function) {
-    if (!this.listeners[event]) this.listeners[event] = [];
-    this.listeners[event].push(callback);
-  }
-
-  off(event: string, callback: Function) {
-    if (!this.listeners[event]) return;
-    this.listeners[event] = this.listeners[event].filter(cb => cb !== callback);
-  }
-
-  emit(event: string, args: any[]) {
-    if (!this.listeners[event]) return;
-    this.listeners[event].forEach(cb => cb(...args));
-  }
-
-  getLocalState() {
-    return this.states.get(this.clientID) || null;
-  }
-
-  setLocalState(state: any) {
-    this.states.set(this.clientID, state);
-    this.emit("update", [{ added: [], updated: [this.clientID], removed: [] }, "local"]);
-    this.emit("change", [{ added: [], updated: [this.clientID], removed: [] }, "local"]);
-  }
-
-  getStates() {
-    return this.states;
-  }
-}
-
 export function useYjsAwareness(
   socket: Socket | null,
   docId: string | undefined,
-  currentUser: { id: string; name: string; avatarUrl?: string } | null,
+  currentUser: { id: string; name: string; avatarUrl?: string; color?: string } | null,
   containerRef: React.RefObject<HTMLElement>,
   pan: { x: number; y: number } = { x: 0, y: 0 },
   zoom: number = 1,
-  yDoc: Y.Doc | null = null
+  provider: SocketIoYjsProvider | null = null
 ) {
   const [remoteCursors, setRemoteCursors] = useState<Record<number, RemoteCursor>>({});
   const throttledUpdateTimer = useRef<any>(null);
 
-  // Instantiate standard Yjs Awareness engine wrapper
-  const [awareness] = useState(() => new SimpleAwareness());
-
-  // Store pan and zoom in refs to prevent event listener thrashing
-  const panRef = useRef(pan);
-  const zoomRef = useRef(zoom);
-
+  // Clean up stale cursors (inactive for > 5 seconds)
   useEffect(() => {
-    panRef.current = pan;
-    zoomRef.current = zoom;
-  }, [pan, zoom]);
+    const interval = setInterval(() => {
+      setRemoteCursors((prev) => {
+        const now = Date.now();
+        let changed = false;
+        const next = { ...prev };
+        
+        Object.entries(next).forEach(([idStr, cursor]) => {
+          if (now - cursor.lastActive > 5000) {
+            delete next[Number(idStr)];
+            changed = true;
+          }
+        });
 
-  // Track state changes via Standard Awareness change / update lifecycle listeners
-  useEffect(() => {
-    const updatePresenceCallback = () => {
-      const states = awareness.getStates();
-      const cursors: Record<number, RemoteCursor> = {};
-
-      states.forEach((state: any, clientId: number) => {
-        if (clientId === awareness.clientID) return;
-        if (!state || !state.user) return;
-
-        cursors[clientId] = {
-          clientId,
-          userId: state.user.userId,
-          name: state.user.name,
-          color: state.user.color || getRandomCursorColor(state.user.userId),
-          avatarUrl: state.user.avatarUrl,
-          x: state.cursor?.x,
-          y: state.cursor?.y,
-          focusedItemId: state.focusedItemId,
-          draggingItemId: state.draggingItemId,
-          dragProgress: state.dragProgress,
-          lastActive: Date.now(),
-        };
+        return changed ? next : prev;
       });
+    }, 2000);
 
-      setRemoteCursors(cursors);
-    };
-
-    awareness.on("change", updatePresenceCallback);
-    awareness.on("update", updatePresenceCallback);
-
-    return () => {
-      awareness.off("change", updatePresenceCallback);
-      awareness.off("update", updatePresenceCallback);
-    };
-  }, [awareness]);
-
-  // Sync awareness payload from socket to standard Yjs Awareness engine
-  useEffect(() => {
-    if (!socket || !docId) return;
-
-    const handleAwarenessUpdate = (payload: any) => {
-      if (payload.docId && payload.docId !== docId) return;
-      const { clientId, state } = payload;
-      if (clientId === awareness.clientID) return;
-
-      if (state === null || state === undefined) {
-        awareness.states.delete(clientId);
-      } else {
-        awareness.states.set(clientId, state);
-      }
-
-      // Explicitly trigger standard Yjs awareness lifecycle event emitter
-      awareness.emit("change", [{ added: [], updated: [clientId], removed: [] }, "remote"]);
-    };
-
-    const handleMemberLeft = (payload: { userId: string }) => {
-      let changed = false;
-      awareness.getStates().forEach((state: any, clientId: number) => {
-        if (state?.user?.userId === payload.userId) {
-          awareness.states.delete(clientId);
-          changed = true;
-        }
-      });
-      if (changed) {
-        awareness.emit("change", [{ added: [], updated: [], removed: [] }, "remote"]);
-      }
-    };
-
-    socket.on(SocketEvents.AWARENESS_UPDATE, handleAwarenessUpdate);
-    socket.on(SocketEvents.MEMBER_LEFT, handleMemberLeft);
-
-    return () => {
-      socket.off(SocketEvents.AWARENESS_UPDATE, handleAwarenessUpdate);
-      socket.off(SocketEvents.MEMBER_LEFT, handleMemberLeft);
-    };
-  }, [socket, docId, awareness]);
+    return () => clearInterval(interval);
+  }, []);
 
   // Send local awareness updates (non-destructively updating state keys)
   const sendLocalAwareness = useCallback(
@@ -168,10 +60,10 @@ export function useYjsAwareness(
       draggingItemId?: string | null;
       dragProgress?: { itemId: string; type: string; x: number; y: number } | null;
     }) => {
-      if (!socket || !docId || !currentUser) return;
+      if (!socket || !docId || !currentUser || !provider) return;
 
-      const userColor = getRandomCursorColor(currentUser.id);
-      const currentState = awareness.getLocalState() || {};
+      const userColor = currentUser.color || getRandomCursorColor(currentUser.id);
+      const currentState = provider.awareness.getLocalState() || {};
 
       const nextCursor = overrides.cursor !== undefined
         ? (overrides.cursor === null ? undefined : overrides.cursor)
@@ -205,27 +97,121 @@ export function useYjsAwareness(
         dragProgress: nextDragProgress,
       };
 
-      awareness.setLocalState(state);
+      provider.awareness.setLocalState(state);
 
       socket.emit(SocketEvents.AWARENESS_UPDATE as any, {
         docId,
-        clientId: awareness.clientID,
+        clientId: provider.awareness.clientID,
         state,
       });
     },
-    [socket, docId, currentUser, awareness]
+    [socket, docId, currentUser, provider]
   );
 
-  // Broadcast initial presence state immediately on mount or socket connection
+  // Track state changes via Standard Awareness change / update lifecycle listeners and sync connection event
   useEffect(() => {
-    if (!socket || !docId || !currentUser) return;
-    sendLocalAwareness({});
-  }, [socket, docId, currentUser, sendLocalAwareness]);
+    if (!provider || !currentUser) return;
 
-  // Throttled mouse move listener
+    const updatePresenceAndCursorsCallback = () => {
+      const states = provider.awareness.getStates();
+      const cursors: Record<number, RemoteCursor> = {};
+
+      states.forEach((state: any, clientId: number) => {
+        if (clientId === provider.awareness.clientID) return;
+        if (!state || !state.user) return;
+
+        cursors[clientId] = {
+          clientId,
+          userId: state.user.userId,
+          name: state.user.name,
+          color: state.user.color || getRandomCursorColor(state.user.userId),
+          avatarUrl: state.user.avatarUrl,
+          x: state.cursor?.x,
+          y: state.cursor?.y,
+          focusedItemId: state.focusedItemId,
+          draggingItemId: state.draggingItemId,
+          dragProgress: state.dragProgress,
+          lastActive: Date.now(),
+        };
+      });
+
+      setRemoteCursors(cursors);
+    };
+
+    const handleSync = (isSynced: boolean) => {
+      if (isSynced) {
+        // 1. Seed user presence
+        provider.awareness.setLocalStateField("user", {
+          id: currentUser.id,
+          name: currentUser.name,
+          color: currentUser.color || getRandomCursorColor(currentUser.id),
+        });
+
+        // 2. Bind active presence/cursors lifecycle listeners once synced
+        provider.awareness.on("change", updatePresenceAndCursorsCallback);
+        provider.awareness.on("update", updatePresenceAndCursorsCallback);
+      }
+    };
+
+    provider.on("sync", handleSync);
+    
+    // Explicit trigger if provider is already in sync state on re-renders
+    if (socket?.connected) {
+      handleSync(true);
+    }
+
+    return () => {
+      provider.off("sync", handleSync);
+      provider.awareness.off("change", updatePresenceAndCursorsCallback);
+      provider.awareness.off("update", updatePresenceAndCursorsCallback);
+    };
+  }, [provider, currentUser, socket]);
+
+  // Sync incoming socket awareness payloads to standard Yjs Awareness states map
+  useEffect(() => {
+    if (!socket || !docId || !provider) return;
+
+    const handleAwarenessUpdate = (payload: any) => {
+      if (payload.docId && payload.docId !== docId) return;
+      const { clientId, state } = payload;
+      if (clientId === provider.awareness.clientID) return;
+
+      if (state === null || state === undefined) {
+        provider.awareness.states.delete(clientId);
+      } else {
+        provider.awareness.states.set(clientId, state);
+      }
+
+      // Explicitly trigger the change emitter
+      provider.awareness.emit("change", [{ added: [], updated: [clientId], removed: [] }, "remote"]);
+    };
+
+    const handleMemberLeft = (payload: { userId: string }) => {
+      let changed = false;
+      provider.awareness.getStates().forEach((state: any, clientId: number) => {
+        if (state?.user?.userId === payload.userId) {
+          provider.awareness.states.delete(clientId);
+          changed = true;
+        }
+      });
+      if (changed) {
+        provider.awareness.emit("change", [{ added: [], updated: [], removed: [] }, "remote"]);
+      }
+    };
+
+    socket.on(SocketEvents.AWARENESS_UPDATE, handleAwarenessUpdate);
+    socket.on(SocketEvents.MEMBER_LEFT, handleMemberLeft);
+
+    return () => {
+      socket.off(SocketEvents.AWARENESS_UPDATE, handleAwarenessUpdate);
+      socket.off(SocketEvents.MEMBER_LEFT, handleMemberLeft);
+    };
+  }, [socket, docId, provider]);
+
+  // Throttled mouse move listener tracking percentages of the canvas viewport boundary box
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || !socket || !docId || !currentUser) return;
+    if (!container || !socket || !docId || !currentUser || !provider) return;
 
     let pendingPos: { x: number; y: number } | null = null;
     let lastSent = 0;
@@ -233,22 +219,21 @@ export function useYjsAwareness(
     const handleMouseMove = (e: MouseEvent) => {
       const rect = container.getBoundingClientRect();
       
-      // client coordinate normalization math relative to pan & zoom
-      const normalizedX = (e.clientX - rect.left - panRef.current.x) / zoomRef.current;
-      const normalizedY = (e.clientY - rect.top - panRef.current.y) / zoomRef.current;
+      const percentX = (e.clientX - rect.left) / rect.width;
+      const percentY = (e.clientY - rect.top) / rect.height;
 
       const now = Date.now();
       const timeSinceLast = now - lastSent;
 
       if (timeSinceLast >= 50) {
         lastSent = now;
-        sendLocalAwareness({ cursor: { x: normalizedX, y: normalizedY } });
+        sendLocalAwareness({ cursor: { x: percentX, y: percentY } });
         if (throttledUpdateTimer.current) {
           clearTimeout(throttledUpdateTimer.current);
           throttledUpdateTimer.current = null;
         }
       } else {
-        pendingPos = { x: normalizedX, y: normalizedY };
+        pendingPos = { x: percentX, y: percentY };
         if (!throttledUpdateTimer.current) {
           throttledUpdateTimer.current = setTimeout(() => {
             if (pendingPos) {
@@ -270,7 +255,7 @@ export function useYjsAwareness(
         clearTimeout(throttledUpdateTimer.current);
       }
     };
-  }, [containerRef, socket, docId, currentUser, sendLocalAwareness]);
+  }, [containerRef, socket, docId, currentUser, provider, sendLocalAwareness]);
 
   const updateFocusedItem = useCallback(
     (focusedItemId: string | undefined) => {

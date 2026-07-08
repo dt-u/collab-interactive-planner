@@ -2,18 +2,82 @@ import * as Y from "yjs";
 import { Socket } from "socket.io-client";
 import { SocketEvents } from "@collab-planner/realtime-protocol";
 
+// Pure TypeScript implementation of the Yjs Awareness lifecycle API to eliminate Vite resolution issues
+export class SimpleAwareness {
+  private listeners: Record<string, Function[]> = {};
+  public clientID: number;
+  public states: Map<number, any> = new Map();
+
+  constructor() {
+    this.clientID = Math.floor(Math.random() * 10000000);
+  }
+
+  on(event: string, callback: Function) {
+    if (!this.listeners[event]) this.listeners[event] = [];
+    this.listeners[event].push(callback);
+  }
+
+  off(event: string, callback: Function) {
+    if (!this.listeners[event]) return;
+    this.listeners[event] = this.listeners[event].filter(cb => cb !== callback);
+  }
+
+  emit(event: string, args: any[]) {
+    if (!this.listeners[event]) return;
+    this.listeners[event].forEach(cb => cb(...args));
+  }
+
+  getLocalState() {
+    return this.states.get(this.clientID) || null;
+  }
+
+  setLocalState(state: any) {
+    this.states.set(this.clientID, state);
+    this.emit("update", [{ added: [], updated: [this.clientID], removed: [] }, "local"]);
+    this.emit("change", [{ added: [], updated: [this.clientID], removed: [] }, "local"]);
+  }
+
+  setLocalStateField(key: string, value: any) {
+    const current = this.getLocalState() || {};
+    current[key] = value;
+    this.setLocalState(current);
+  }
+
+  getStates() {
+    return this.states;
+  }
+}
+
 export class SocketIoYjsProvider {
   private doc: Y.Doc;
   private socket: Socket;
   private docId: string;
   private isDestroyed = false;
+  private listeners: Record<string, Function[]> = {};
+  public awareness: SimpleAwareness;
 
   constructor(docId: string, doc: Y.Doc, socket: Socket) {
     this.docId = docId;
     this.doc = doc;
     this.socket = socket;
+    this.awareness = new SimpleAwareness();
 
     this.init();
+  }
+
+  on(event: string, callback: Function) {
+    if (!this.listeners[event]) this.listeners[event] = [];
+    this.listeners[event].push(callback);
+  }
+
+  off(event: string, callback: Function) {
+    if (!this.listeners[event]) return;
+    this.listeners[event] = this.listeners[event].filter(cb => cb !== callback);
+  }
+
+  emit(event: string, args: any[]) {
+    if (!this.listeners[event]) return;
+    this.listeners[event].forEach(cb => cb(...args));
   }
 
   private init() {
@@ -49,6 +113,8 @@ export class SocketIoYjsProvider {
         update,
       });
     }
+    // Handshake completes
+    this.emit("sync", [true]);
   };
 
   private handleSyncStep2 = (payload: { docId: string; update: Uint8Array | ArrayBuffer }) => {
@@ -56,6 +122,8 @@ export class SocketIoYjsProvider {
 
     // Server sent updates we are missing. Apply them.
     Y.applyUpdate(this.doc, new Uint8Array(payload.update), this);
+    // Handshake completes
+    this.emit("sync", [true]);
   };
 
   private handleUpdate = (payload: { docId: string; update: Uint8Array | ArrayBuffer }) => {
