@@ -1696,6 +1696,8 @@ export const KanbanBoard: React.FC = () => {
                 left: "-10000px",
                 width: "20000px",
                 height: "20000px",
+                background: "transparent",
+                backgroundColor: "transparent",
                 zIndex: activeTool !== "select" ? 25 : -1,
                 pointerEvents: activeTool !== "select" ? "auto" : "none",
                 cursor: activeTool === "brush" ? "crosshair" : activeTool === "eraser" ? "cell" : "default",
