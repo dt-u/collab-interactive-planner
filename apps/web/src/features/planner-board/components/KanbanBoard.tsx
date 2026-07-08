@@ -114,8 +114,8 @@ const WhiteboardColumn: React.FC<WhiteboardColumnProps> = ({
   });
 
   const colPos = localColPositions[colId] || { x: index * 360, y: 0 };
-  const tx = transform ? transform.x / zoom : 0;
-  const ty = transform ? transform.y / zoom : 0;
+  const tx = transform ? transform.x : 0;
+  const ty = transform ? transform.y : 0;
 
   // Cycle sorted items logic
   const itemsMap = yDoc ? getSharedItems(yDoc) : null;
@@ -1569,70 +1569,7 @@ export const KanbanBoard: React.FC = () => {
               })()}
             </div>
 
-            {/* Remote Cursors Overlay (Inside viewport for proper scaling alignment) */}
-            <div className="remote-cursor-layer" style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 40 }}>
-              {remoteCursors
-                .filter((c) => c.x !== undefined && c.y !== undefined && !c.draggingItemId)
-                .map((c) => (
-                  <div
-                    key={c.clientId}
-                    style={{
-                      position: "absolute",
-                      left: `${c.x!}px`,
-                      top: `${c.y!}px`,
-                      zIndex: 50,
-                      pointerEvents: "none",
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "flex-start",
-                      // Apply counter-scaling so cursor elements stay at constant visual size
-                      transform: `scale(${1 / zoom})`,
-                      transformOrigin: "0 0",
-                      transition: "left 0.15s ease-out, top 0.15s ease-out",
-                    }}
-                  >
-                    <div style={{ position: "relative", display: "inline-flex" }}>
-                      <svg
-                        width="24" height="24" viewBox="0 0 24 24" fill="none"
-                        xmlns="http://www.w3.org/2000/svg"
-                        style={{ filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.15))" }}
-                      >
-                        <path d="M5.5 3.21V20.8C5.5 21.6 6.38 22.08 7.04 21.65L10.82 19.16C11.08 18.99 11.4 18.92 11.71 18.97L16.29 19.68C17.06 19.8 17.65 19.06 17.37 18.33L10.37 3.01C10.02 2.23 8.88 2.31 8.65 3.13L5.5 3.21Z" fill={c.color} stroke="white" strokeWidth="1.5" />
-                      </svg>
-                      <div
-                        className="animate-pulse-ring"
-                        style={{
-                          position: "absolute",
-                          top: 4,
-                          left: 4,
-                          width: 12,
-                          height: 12,
-                          borderRadius: "50%",
-                          backgroundColor: c.color,
-                          zIndex: -1,
-                        }}
-                      />
-                    </div>
-                    <div
-                      style={{
-                        backgroundColor: c.color,
-                        marginTop: 4,
-                        marginLeft: 12,
-                        padding: "2px 6px",
-                        borderRadius: 4,
-                        boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
-                        fontSize: 9,
-                        fontWeight: 700,
-                        color: "white",
-                        letterSpacing: "0.05em",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {c.name}
-                    </div>
-                  </div>
-                ))}
-            </div>
+            
 
             {/* Remote Dragging Ghosts Overlay (Floating dashed bounding box previews) */}
             {remoteCursors
@@ -1715,6 +1652,68 @@ export const KanbanBoard: React.FC = () => {
                   );
                 }
               })}
+          </div>
+
+          {/* Remote Cursors Overlay (Outside viewport to prevent double-scaling multiplication issues) */}
+          <div className="remote-cursor-layer" style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 40 }}>
+            {remoteCursors
+              .filter((c) => c.x !== undefined && c.y !== undefined && !c.draggingItemId)
+              .map((c) => (
+                <div
+                  key={c.clientId}
+                  style={{
+                    position: "absolute",
+                    left: `${c.x! * zoom + pan.x}px`,
+                    top: `${c.y! * zoom + pan.y}px`,
+                    zIndex: 50,
+                    pointerEvents: "none",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "flex-start",
+                    transition: "left 0.15s ease-out, top 0.15s ease-out",
+                  }}
+                >
+                  <div style={{ position: "relative", display: "inline-flex" }}>
+                    <svg
+                      width="24" height="24" viewBox="0 0 24 24" fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                      style={{ filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.15))" }}
+                    >
+                      <path d="M5.5 3.21V20.8C5.5 21.6 6.38 22.08 7.04 21.65L10.82 19.16C11.08 18.99 11.4 18.92 11.71 18.97L16.29 19.68C17.06 19.8 17.65 19.06 17.37 18.33L10.37 3.01C10.02 2.23 8.88 2.31 8.65 3.13L5.5 3.21Z" fill={c.color} stroke="white" strokeWidth="1.5" />
+                    </svg>
+                    <div
+                      className="animate-pulse-ring"
+                      style={{
+                        position: "absolute",
+                        top: 4,
+                        left: 4,
+                        width: 12,
+                        height: 12,
+                        borderRadius: "50%",
+                        backgroundColor: c.color,
+                        zIndex: -1,
+                      }}
+                    />
+                  </div>
+                  <div
+                    style={{
+                      backgroundColor: c.color,
+                      marginTop: 4,
+                      marginLeft: 12,
+                      padding: "2px 6px",
+                      borderRadius: 4,
+                      boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
+                      fontSize: 9,
+                      fontWeight: 700,
+                      color: "white",
+                      letterSpacing: "0.05em",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {c.name}
+                  </div>
+                </div>
+              ))}
           </div>
 
           {/* Floating DragOverlay styled preview */}
