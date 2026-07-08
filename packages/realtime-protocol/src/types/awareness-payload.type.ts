@@ -15,11 +15,19 @@ export interface SelectionRange {
   head: number;
 }
 
+export interface DragProgress {
+  itemId: string;
+  type: string; // 'TASK' | 'COLUMN'
+  x: number;
+  y: number;
+}
+
 export interface AwarenessState {
   user: UserPresence;
   cursor?: CursorPosition;
   focusedItemId?: string;
   selection?: SelectionRange;
+  dragProgress?: DragProgress;
 }
 
 export interface AwarenessPayload {

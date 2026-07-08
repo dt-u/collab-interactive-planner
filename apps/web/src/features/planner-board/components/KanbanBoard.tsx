@@ -259,6 +259,16 @@ export const KanbanBoard: React.FC = () => {
     };
   }, []);
 
+  // Track the client's mouse coordinates globally to map absolute dragProgress points
+  const lastMousePos = useRef({ clientX: 0, clientY: 0 });
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      lastMousePos.current = { clientX: e.clientX, clientY: e.clientY };
+    };
+    window.addEventListener("mousemove", handleMouseMove);
+    return () => window.removeEventListener("mousemove", handleMouseMove);
+  }, []);
+
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
     const isCanvas =
@@ -671,7 +681,7 @@ export const KanbanBoard: React.FC = () => {
   // 5. Awareness Layer (Tracking is scoped to the zoomed whiteboard viewport ref)
   const canvasRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
-  const { remoteCursors, updateFocusedItem, updateDraggingItem } = useYjsAwareness(
+  const { remoteCursors, updateFocusedItem, updateDraggingItem, updateDragProgress } = useYjsAwareness(
     socket,
     planId,
     currentUser,
@@ -697,7 +707,7 @@ export const KanbanBoard: React.FC = () => {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8,
+        distance: 4,
       },
     })
   );
@@ -766,7 +776,9 @@ export const KanbanBoard: React.FC = () => {
 
   const handleDragMove = (event: DragMoveEvent) => {
     const { active, delta } = event;
-    if (active.data.current?.type === "COLUMN") {
+    const type = active.data.current?.type;
+
+    if (type === "COLUMN") {
       const colId = active.data.current?.colId;
       if (!colId) return;
       const startPos = colPositions[colId] || {
@@ -774,14 +786,40 @@ export const KanbanBoard: React.FC = () => {
         y: 0,
       };
       
+      const currentX = startPos.x + delta.x / zoom;
+      const currentY = startPos.y + delta.y / zoom;
+
       // Update local React UI position overrides smoothly at 60fps
       setLocalColPositions((prev) => ({
         ...prev,
         [colId]: {
-          x: startPos.x + delta.x / zoom,
-          y: startPos.y + delta.y / zoom,
+          x: currentX,
+          y: currentY,
         },
       }));
+
+      // Broadcast drag progress through Yjs awareness simulation
+      updateDragProgress({
+        itemId: colId,
+        type: "COLUMN",
+        x: currentX,
+        y: currentY,
+      });
+    } else {
+      // For a TASK card, we broadcast the mouse pointer position
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (rect) {
+        // Calculate pointer coordinates inside canvas
+        const normalizedX = (lastMousePos.current.clientX - rect.left - pan.x) / zoom;
+        const normalizedY = (lastMousePos.current.clientY - rect.top - pan.y) / zoom;
+
+        updateDragProgress({
+          itemId: active.id as string,
+          type: "TASK",
+          x: normalizedX - 140, // center ghost card slightly relative to mouse cursor
+          y: normalizedY - 30,
+        });
+      }
     }
   };
 
@@ -789,6 +827,7 @@ export const KanbanBoard: React.FC = () => {
     setIsDraggingLocal(false);
     setActiveId(null);
     updateDraggingItem(undefined);
+    updateDragProgress(undefined); // Clear drag progress from awareness
     const { active, delta, over } = event;
 
     if (active.data.current?.type === "COLUMN") {
@@ -801,6 +840,12 @@ export const KanbanBoard: React.FC = () => {
       
       const finalX = startPos.x + delta.x / zoom;
       const finalY = startPos.y + delta.y / zoom;
+      
+      // Update local state immediately so there's zero jump/flicker
+      setLocalColPositions((prev) => ({
+        ...prev,
+        [colId]: { x: finalX, y: finalY },
+      }));
       
       if (yDoc) {
         const colPosMap = yDoc.getMap("columnPositions");
@@ -863,6 +908,7 @@ export const KanbanBoard: React.FC = () => {
     setIsDraggingLocal(false);
     setActiveId(null);
     updateDraggingItem(undefined);
+    updateDragProgress(undefined); // Clear drag progress from awareness
     setLocalColPositions({ ...colPositions });
   };
 
@@ -1521,6 +1567,87 @@ export const KanbanBoard: React.FC = () => {
                 ))}
             </div>
 
+            {/* Remote Dragging Ghosts Overlay (Floating dashed bounding box previews) */}
+            {remoteCursors
+              .filter((c) => c.dragProgress !== undefined)
+              .map((c) => {
+                const dp = c.dragProgress!;
+                if (dp.type === "COLUMN") {
+                  return (
+                    <div
+                      key={`ghost-col-${c.clientId}`}
+                      style={{
+                        position: "absolute",
+                        left: `${dp.x}px`,
+                        top: `${dp.y}px`,
+                        width: "316px",
+                        height: "600px",
+                        backgroundColor: "rgba(99, 102, 241, 0.04)",
+                        border: `2px dashed ${c.color}`,
+                        borderRadius: "16px",
+                        pointerEvents: "none",
+                        zIndex: 35,
+                        padding: "16px",
+                        boxSizing: "border-box",
+                        display: "flex",
+                        flexDirection: "column",
+                        transition: "left 0.1s ease-out, top 0.1s ease-out",
+                      }}
+                    >
+                      <div style={{
+                        fontSize: "10px",
+                        fontWeight: 700,
+                        color: c.color,
+                        backgroundColor: "rgba(15, 23, 42, 0.8)",
+                        padding: "4px 8px",
+                        borderRadius: "6px",
+                        alignSelf: "flex-start",
+                        border: `1px solid ${c.color}`,
+                      }}>
+                        {c.name} is moving column...
+                      </div>
+                    </div>
+                  );
+                } else {
+                  return (
+                    <div
+                      key={`ghost-task-${c.clientId}`}
+                      style={{
+                        position: "absolute",
+                        left: `${dp.x}px`,
+                        top: `${dp.y}px`,
+                        width: "280px",
+                        height: "120px",
+                        backgroundColor: "rgba(99, 102, 241, 0.08)",
+                        border: `2px dashed ${c.color}`,
+                        borderRadius: "12px",
+                        pointerEvents: "none",
+                        zIndex: 35,
+                        padding: "12px",
+                        boxSizing: "border-box",
+                        display: "flex",
+                        flexDirection: "column",
+                        justifyContent: "center",
+                        transition: "left 0.1s ease-out, top 0.1s ease-out",
+                      }}
+                    >
+                      <div style={{
+                        fontSize: "10px",
+                        fontWeight: 700,
+                        color: c.color,
+                        backgroundColor: "rgba(15, 23, 42, 0.8)",
+                        padding: "4px 8px",
+                        borderRadius: "6px",
+                        alignSelf: "center",
+                        border: `1px solid ${c.color}`,
+                        textAlign: "center"
+                      }}>
+                        {c.name} is dragging item...
+                      </div>
+                    </div>
+                  );
+                }
+              })}
           </div>
 
           {/* Floating DragOverlay styled preview */}

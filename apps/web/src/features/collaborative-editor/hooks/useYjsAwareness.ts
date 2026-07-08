@@ -13,6 +13,7 @@ export interface RemoteCursor {
   y?: number; // absolute canvas space y coordinate
   focusedItemId?: string;
   draggingItemId?: string; // tracks remote user dragging status
+  dragProgress?: { itemId: string; type: string; x: number; y: number }; // remote user drag progress
   lastActive: number;
 }
 
@@ -40,6 +41,7 @@ export function useYjsAwareness(
   const localCursorRef = useRef<{ x: number; y: number } | undefined>(undefined);
   const localFocusedItemRef = useRef<string | undefined>(undefined);
   const localDraggingItemRef = useRef<string | undefined>(undefined);
+  const localDragProgressRef = useRef<{ itemId: string; type: string; x: number; y: number } | undefined>(undefined);
 
   const getClientId = useCallback(() => {
     if (!socket?.id) return 0;
@@ -97,6 +99,7 @@ export function useYjsAwareness(
           y: state.cursor?.y,
           focusedItemId: state.focusedItemId,
           draggingItemId: state.draggingItemId,
+          dragProgress: state.dragProgress,
           lastActive: Date.now(),
         },
       }));
@@ -127,12 +130,20 @@ export function useYjsAwareness(
 
   // Send local awareness updates (throttled)
   const sendLocalAwareness = useCallback(
-    (cursorPos?: { x: number; y: number }, focusedItemId?: string, draggingItemId?: string) => {
+    (
+      cursorPos?: { x: number; y: number },
+      focusedItemId?: string,
+      draggingItemId?: string,
+      dragProgress?: { itemId: string; type: string; x: number; y: number } | null
+    ) => {
       if (!socket || !docId || !currentUser) return;
 
       if (cursorPos !== undefined) localCursorRef.current = cursorPos;
       if (focusedItemId !== undefined) localFocusedItemRef.current = focusedItemId;
       if (draggingItemId !== undefined) localDraggingItemRef.current = draggingItemId;
+      if (dragProgress !== undefined) {
+        localDragProgressRef.current = dragProgress === null ? undefined : dragProgress;
+      }
 
       const myClientId = getClientId();
       const userColor = getRandomCursorColor(currentUser.id);
@@ -152,6 +163,7 @@ export function useYjsAwareness(
         } : undefined,
         focusedItemId: localFocusedItemRef.current,
         draggingItemId: localDraggingItemRef.current,
+        dragProgress: localDragProgressRef.current,
       };
 
       socket.emit(SocketEvents.AWARENESS_UPDATE as any, {
@@ -162,6 +174,12 @@ export function useYjsAwareness(
     },
     [socket, docId, currentUser, getClientId]
   );
+
+  // Broadcast initial presence state immediately on mount or socket connection
+  useEffect(() => {
+    if (!socket || !docId || !currentUser) return;
+    sendLocalAwareness(undefined, undefined, undefined, undefined);
+  }, [socket, docId, currentUser, sendLocalAwareness]);
 
   // Throttled mouse move listener
   useEffect(() => {
@@ -227,9 +245,17 @@ export function useYjsAwareness(
     [sendLocalAwareness]
   );
 
+  const updateDragProgress = useCallback(
+    (dragProgress: { itemId: string; type: string; x: number; y: number } | undefined) => {
+      sendLocalAwareness(undefined, undefined, undefined, dragProgress === undefined ? null : dragProgress);
+    },
+    [sendLocalAwareness]
+  );
+
   return {
     remoteCursors: Object.values(remoteCursors),
     updateFocusedItem,
     updateDraggingItem,
+    updateDragProgress,
   };
 }
