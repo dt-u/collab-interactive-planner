@@ -25,7 +25,7 @@ import { useJoinPlannerRoom } from "../../realtime/hooks/useJoinPlannerRoom.js";
 import { SocketIoYjsProvider } from "../../collaborative-editor/yjs/socket-io-yjs-provider.js";
 import { useYjsColumns } from "../../collaborative-editor/hooks/useYjsDocument.js";
 import { useYjsAwareness } from "../../collaborative-editor/hooks/useYjsAwareness.js";
-import { useDrawingPaths } from "../../collaborative-editor/hooks/useDrawingPaths.js";
+import { useDrawingPaths, CanvasElement, ActiveToolType } from "../../collaborative-editor/hooks/useDrawingPaths.js";
 import {
   getSharedColumns,
   getSharedItems,
@@ -36,7 +36,7 @@ import {
 import { httpClient } from "../../../shared/api/http-client.js";
 import { BoardTaskCard } from "./BoardTaskCard.js";
 import { TaskDetailModal } from "./TaskDetailModal.js";
-import { Plus, ArrowLeft, Trash2, X, Copy, MapPin, Menu, Settings, Edit2, CheckCircle2, AlertCircle, Crosshair, MousePointer, Eraser } from "lucide-react";
+import { Plus, ArrowLeft, Trash2, X, Copy, MapPin, Menu, Settings, Edit2, CheckCircle2, AlertCircle, Crosshair, MousePointer, Eraser, Type, Square, Circle, ArrowUpRight } from "lucide-react";
 import { Spinner } from "../../../shared/ui/spinner/Spinner.js";
 
 interface ColumnCardsContainerProps {
@@ -387,11 +387,39 @@ export const KanbanBoard: React.FC = () => {
   const spacePressed = useRef(false);
 
   // Collaborative Drawing States
-  const [activeTool, setActiveTool] = useState<"select" | "brush" | "eraser">("select");
+  const [activeTool, setActiveTool] = useState<ActiveToolType>("select");
   const [brushColor, setBrushColor] = useState("#38bdf8");
   const [brushSize, setBrushSize] = useState(6);
   const drawingCanvasRef = useRef<HTMLCanvasElement>(null);
   const minimapDragStart = useRef<{ x: number; y: number; pan: { x: number; y: number } } | null>(null);
+
+  // Floating text input temporary state
+  const [activeTextInput, setActiveTextInput] = useState<{
+    id: string;
+    x: number;
+    y: number;
+    clientX: number;
+    clientY: number;
+  } | null>(null);
+  const [textInputValue, setTextInputValue] = useState("");
+
+  const commitTextInput = () => {
+    if (!activeTextInput) return;
+    const val = textInputValue.trim();
+    if (val && yDoc) {
+      const yjsElements = yDoc.getMap<CanvasElement>("canvasElements");
+      yjsElements.set(activeTextInput.id, {
+        id: activeTextInput.id,
+        type: "text",
+        x: activeTextInput.x,
+        y: activeTextInput.y,
+        color: brushColor,
+        strokeWidth: brushSize,
+        textData: val,
+      });
+    }
+    setActiveTextInput(null);
+  };
 
   const { startDrawing, drawMove, endDrawing } = useDrawingPaths(
     yDoc,
@@ -440,11 +468,23 @@ export const KanbanBoard: React.FC = () => {
     const rect = canvas.getBoundingClientRect();
     const x = (e.clientX - rect.left) / zoom;
     const y = (e.clientY - rect.top) / zoom;
-    startDrawing(x, y);
+
+    if (activeTool === "text") {
+      setActiveTextInput({
+        id: `el_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+        x,
+        y,
+        clientX: e.clientX,
+        clientY: e.clientY,
+      });
+      setTextInputValue("");
+    } else {
+      startDrawing(x, y);
+    }
   };
 
   const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (activeTool === "select") return;
+    if (activeTool === "select" || activeTool === "text") return;
     if (e.buttons !== 1) return;
     const canvas = drawingCanvasRef.current;
     if (!canvas) return;
@@ -2133,8 +2173,128 @@ export const KanbanBoard: React.FC = () => {
             <Eraser size={18} />
           </button>
 
+          {/* Text Tool */}
+          <button
+            onClick={() => setActiveTool("text")}
+            style={{
+              background: activeTool === "text" ? "rgba(255, 255, 255, 0.12)" : "transparent",
+              border: "none",
+              borderRadius: 8,
+              padding: 8,
+              color: activeTool === "text" ? "#38bdf8" : "#94a3b8",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "all 0.2s",
+            }}
+            title="Text Tool"
+          >
+            <Type size={18} />
+          </button>
+
+          {/* Unfilled Rectangle */}
+          <button
+            onClick={() => setActiveTool("rect_rect")}
+            style={{
+              background: activeTool === "rect_rect" ? "rgba(255, 255, 255, 0.12)" : "transparent",
+              border: "none",
+              borderRadius: 8,
+              padding: 8,
+              color: activeTool === "rect_rect" ? "#38bdf8" : "#94a3b8",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "all 0.2s",
+            }}
+            title="Rectangle Outline"
+          >
+            <Square size={18} />
+          </button>
+
+          {/* Filled Rectangle */}
+          <button
+            onClick={() => setActiveTool("rect_fill")}
+            style={{
+              background: activeTool === "rect_fill" ? "rgba(255, 255, 255, 0.12)" : "transparent",
+              border: "none",
+              borderRadius: 8,
+              padding: 8,
+              color: activeTool === "rect_fill" ? "#38bdf8" : "#94a3b8",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "all 0.2s",
+            }}
+            title="Filled Rectangle"
+          >
+            <Square size={18} style={{ fill: "currentColor" }} />
+          </button>
+
+          {/* Unfilled Ellipse */}
+          <button
+            onClick={() => setActiveTool("ellipse_rect")}
+            style={{
+              background: activeTool === "ellipse_rect" ? "rgba(255, 255, 255, 0.12)" : "transparent",
+              border: "none",
+              borderRadius: 8,
+              padding: 8,
+              color: activeTool === "ellipse_rect" ? "#38bdf8" : "#94a3b8",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "all 0.2s",
+            }}
+            title="Ellipse Outline"
+          >
+            <Circle size={18} />
+          </button>
+
+          {/* Filled Ellipse */}
+          <button
+            onClick={() => setActiveTool("ellipse_fill")}
+            style={{
+              background: activeTool === "ellipse_fill" ? "rgba(255, 255, 255, 0.12)" : "transparent",
+              border: "none",
+              borderRadius: 8,
+              padding: 8,
+              color: activeTool === "ellipse_fill" ? "#38bdf8" : "#94a3b8",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "all 0.2s",
+            }}
+            title="Filled Ellipse"
+          >
+            <Circle size={18} style={{ fill: "currentColor" }} />
+          </button>
+
+          {/* Arrow Tool */}
+          <button
+            onClick={() => setActiveTool("arrow_line")}
+            style={{
+              background: activeTool === "arrow_line" ? "rgba(255, 255, 255, 0.12)" : "transparent",
+              border: "none",
+              borderRadius: 8,
+              padding: 8,
+              color: activeTool === "arrow_line" ? "#38bdf8" : "#94a3b8",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "all 0.2s",
+            }}
+            title="Arrow Line"
+          >
+            <ArrowUpRight size={18} />
+          </button>
+
           {/* Color Picker Swatches */}
-          {activeTool === "brush" && (
+          {activeTool !== "select" && activeTool !== "eraser" && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, borderLeft: "1px solid rgba(255, 255, 255, 0.1)", paddingLeft: 16 }}>
               {["#38bdf8", "#f43f5e", "#10b981", "#fbbf24", "#a855f7"].map((color) => (
                 <button
@@ -2157,7 +2317,7 @@ export const KanbanBoard: React.FC = () => {
           )}
 
           {/* Brush Size Slider */}
-          {activeTool === "brush" && (
+          {activeTool !== "select" && activeTool !== "eraser" && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, borderLeft: "1px solid rgba(255, 255, 255, 0.1)", paddingLeft: 16 }}>
               <span style={{ fontSize: 11, color: "#94a3b8" }}>Size:</span>
               <input
@@ -2247,6 +2407,41 @@ export const KanbanBoard: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Floating interactive text input textarea element */}
+      {activeTextInput && (
+        <textarea
+          autoFocus
+          value={textInputValue}
+          onChange={(e) => setTextInputValue(e.target.value)}
+          onBlur={commitTextInput}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              commitTextInput();
+            } else if (e.key === "Escape") {
+              setActiveTextInput(null);
+            }
+          }}
+          style={{
+            position: "fixed",
+            left: activeTextInput.clientX,
+            top: activeTextInput.clientY,
+            zIndex: 80,
+            background: "rgba(15, 23, 42, 0.95)",
+            border: "1.5px solid #38bdf8",
+            borderRadius: 6,
+            color: "white",
+            padding: "6px 10px",
+            font: `${brushSize * 2 + 14}px sans-serif`,
+            outline: "none",
+            minWidth: 160,
+            minHeight: 44,
+            resize: "both",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
+          }}
+        />
+      )}
 
       {/* Task Edit Modal Overlay */}
       {activeTaskId && (
