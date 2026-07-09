@@ -414,16 +414,23 @@ export const KanbanBoard: React.FC = () => {
     if (!activeTextInput) return;
     const val = textInputValue.trim();
     if (val && yDoc) {
-      const yjsElements = yDoc.getMap<CanvasElement>("canvasElements");
-      yjsElements.set(activeTextInput.id, {
-        id: activeTextInput.id,
-        type: "text",
-        x: activeTextInput.x,
-        y: activeTextInput.y,
-        color: brushColor,
-        strokeWidth: brushSize,
-        textData: val,
-      });
+      const canvas = drawingCanvasRef.current;
+      if (canvas) {
+        const rect = canvas.getBoundingClientRect();
+        const normalizedX = (activeTextInput.clientX - rect.left) / zoom;
+        const normalizedY = (activeTextInput.clientY - rect.top) / zoom;
+
+        const yjsElements = yDoc.getMap<CanvasElement>("canvasElements");
+        yjsElements.set(activeTextInput.id, {
+          id: activeTextInput.id,
+          type: "text",
+          x: normalizedX,
+          y: normalizedY,
+          color: brushColor,
+          strokeWidth: brushSize,
+          textData: val,
+        });
+      }
     }
     setActiveTextInput(null);
   };
@@ -2488,38 +2495,42 @@ export const KanbanBoard: React.FC = () => {
             })()}
           </div>
         </div>
+          {/* Floating interactive text input textarea element inside 100% scale layer */}
+          {activeTextInput && (
+            <textarea
+              ref={textInputRef}
+              autoFocus
+              value={textInputValue}
+              onChange={(e) => setTextInputValue(e.target.value)}
+              onBlur={commitTextInput}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  commitTextInput();
+                } else if (e.key === "Escape") {
+                  setActiveTextInput(null);
+                }
+              }}
+              style={{
+                position: "absolute",
+                left: activeTextInput.clientX - (canvasRef.current?.getBoundingClientRect().left ?? 0),
+                top: activeTextInput.clientY - (canvasRef.current?.getBoundingClientRect().top ?? 0),
+                width: "240px",
+                height: "80px",
+                background: "rgba(30, 30, 40, 0.85)",
+                backdropFilter: "blur(8px)",
+                border: "1px solid rgba(255, 255, 255, 0.2)",
+                borderRadius: "6px",
+                padding: "8px",
+                color: brushColor,
+                font: "14px sans-serif",
+                outline: "none",
+                resize: "none",
+                zIndex: 9999,
+              }}
+            />
+          )}
       </div>
-
-      {/* Floating interactive text input textarea element */}
-      {activeTextInput && (
-        <textarea
-          ref={textInputRef}
-          autoFocus
-          value={textInputValue}
-          onChange={(e) => setTextInputValue(e.target.value)}
-          onBlur={commitTextInput}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              commitTextInput();
-            } else if (e.key === "Escape") {
-              setActiveTextInput(null);
-            }
-          }}
-          style={{
-            position: "absolute",
-            left: activeTextInput.clientX,
-            top: activeTextInput.clientY,
-            background: "transparent",
-            border: "none",
-            outline: "none",
-            color: brushColor,
-            font: "14px sans-serif",
-            resize: "none",
-            zIndex: 100,
-          }}
-        />
-      )}
 
       {/* Task Edit Modal Overlay */}
       {activeTaskId && (
