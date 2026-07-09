@@ -692,6 +692,20 @@ export const KanbanBoard: React.FC = () => {
     const x = (e.clientX - rect.left) / zoom;
     const y = (e.clientY - rect.top) / zoom;
 
+    // Dynamic resize cursor helper for image corners hover
+    if (activeTool === "select") {
+      const resizeTarget = findResizingElementCorner(x, y);
+      if (resizeTarget) {
+        canvas.style.cursor = "nwse-resize";
+      } else {
+        canvas.style.cursor = "default";
+      }
+    } else if (activeTool === "brush") {
+      canvas.style.cursor = "crosshair";
+    } else if (activeTool === "eraser") {
+      canvas.style.cursor = "cell";
+    }
+
     if (activeResizingElementId && resizeStartPoint && resizeStartSize && yDoc) {
       e.stopPropagation();
       const dx = x - resizeStartPoint.x;
@@ -980,7 +994,7 @@ export const KanbanBoard: React.FC = () => {
 
       const key = e.key.toLowerCase();
       switch (key) {
-        case "s":
+        case "c":
           setActiveTool("select");
           break;
         case "b":
@@ -998,7 +1012,7 @@ export const KanbanBoard: React.FC = () => {
         case "f":
           setActiveTool("rect_fill");
           break;
-        case "c":
+        case "q":
           setActiveTool("ellipse_rect");
           break;
         case "o":
@@ -2566,7 +2580,7 @@ export const KanbanBoard: React.FC = () => {
               justifyContent: "center",
               transition: "all 0.2s",
             }}
-            title="Select Tool (S)"
+            title="Select Tool (C)"
           >
             <MousePointer size={18} />
           </button>
@@ -2686,7 +2700,7 @@ export const KanbanBoard: React.FC = () => {
               justifyContent: "center",
               transition: "all 0.2s",
             }}
-            title="Ellipse (C)"
+            title="Ellipse (Q)"
           >
             <Circle size={18} />
           </button>
