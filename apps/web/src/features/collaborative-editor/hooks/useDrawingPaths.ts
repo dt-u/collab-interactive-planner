@@ -3,7 +3,7 @@ import * as Y from "yjs";
 
 export interface CanvasElement {
   id: string;
-  type: "path" | "text" | "rectangle" | "ellipse" | "arrow";
+  type: "path" | "text" | "rectangle" | "ellipse" | "arrow" | "line";
   x: number;
   y: number;
   width?: number;
@@ -24,6 +24,7 @@ export type ActiveToolType =
   | "rect_fill"
   | "ellipse_rect"
   | "ellipse_fill"
+  | "line"
   | "arrow_line";
 
 export function useDrawingPaths(
@@ -140,6 +141,13 @@ export function useDrawingPaths(
             ctx.fill();
             break;
 
+          case "line":
+            ctx.beginPath();
+            ctx.moveTo(el.x, el.y);
+            ctx.lineTo(el.x + (el.width ?? 0), el.y + (el.height ?? 0));
+            ctx.stroke();
+            break;
+
           case "text":
             ctx.font = `${el.strokeWidth * 3 + 14}px sans-serif`;
             ctx.textBaseline = "top";
@@ -192,7 +200,7 @@ export function useDrawingPaths(
         let xmax = el.x + (el.width ?? 0);
         let ymax = el.y + (el.height ?? 0);
 
-        if (el.type === "arrow") {
+        if (el.type === "arrow" || el.type === "line") {
           xmin = Math.min(el.x, el.x + (el.width ?? 0));
           xmax = Math.max(el.x, el.x + (el.width ?? 0));
           ymin = Math.min(el.y, el.y + (el.height ?? 0));
@@ -267,6 +275,8 @@ export function useDrawingPaths(
         const type =
           activeTool === "arrow_line"
             ? "arrow"
+            : activeTool === "line"
+            ? "line"
             : activeTool.startsWith("ellipse")
             ? "ellipse"
             : "rectangle";
@@ -322,7 +332,10 @@ export function useDrawingPaths(
         const dx = x - start.x;
         const dy = y - start.y;
 
-        if (activePreviewElementRef.current.type === "arrow") {
+        if (
+          activePreviewElementRef.current.type === "arrow" ||
+          activePreviewElementRef.current.type === "line"
+        ) {
           const updated: CanvasElement = {
             ...activePreviewElementRef.current,
             width: dx,

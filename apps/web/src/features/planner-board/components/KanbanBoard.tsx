@@ -36,7 +36,7 @@ import {
 import { httpClient } from "../../../shared/api/http-client.js";
 import { BoardTaskCard } from "./BoardTaskCard.js";
 import { TaskDetailModal } from "./TaskDetailModal.js";
-import { Plus, ArrowLeft, Trash2, X, Copy, MapPin, Menu, Settings, Edit2, CheckCircle2, AlertCircle, Crosshair, MousePointer, Eraser, Type, Square, Circle, ArrowUpRight } from "lucide-react";
+import { Plus, ArrowLeft, Trash2, X, Copy, MapPin, Menu, Settings, Edit2, CheckCircle2, AlertCircle, Crosshair, MousePointer, Eraser, Type, Square, Circle, ArrowUpRight, Minus } from "lucide-react";
 import { Spinner } from "../../../shared/ui/spinner/Spinner.js";
 
 interface ColumnCardsContainerProps {
@@ -402,6 +402,13 @@ export const KanbanBoard: React.FC = () => {
     clientY: number;
   } | null>(null);
   const [textInputValue, setTextInputValue] = useState("");
+  const textInputRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (activeTextInput && textInputRef.current) {
+      textInputRef.current.focus();
+    }
+  }, [activeTextInput]);
 
   const commitTextInput = () => {
     if (!activeTextInput) return;
@@ -644,6 +651,61 @@ export const KanbanBoard: React.FC = () => {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, []);
+
+  // Unified Keyboard Shortcuts listener
+  useEffect(() => {
+    const handleHotkeyKeyDown = (e: KeyboardEvent) => {
+      // Shortcut Boundary Guard: Abort if user is typing in input or textarea
+      const target = document.activeElement;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          (target as HTMLElement).isContentEditable)
+      ) {
+        return;
+      }
+
+      const key = e.key.toLowerCase();
+      switch (key) {
+        case "s":
+          setActiveTool("select");
+          break;
+        case "b":
+          setActiveTool("brush");
+          break;
+        case "e":
+          setActiveTool("eraser");
+          break;
+        case "t":
+          setActiveTool("text");
+          break;
+        case "r":
+          setActiveTool("rect_rect");
+          break;
+        case "f":
+          setActiveTool("rect_fill");
+          break;
+        case "c":
+          setActiveTool("ellipse_rect");
+          break;
+        case "o":
+          setActiveTool("ellipse_fill");
+          break;
+        case "l":
+          setActiveTool("line");
+          break;
+        case "v":
+          setActiveTool("arrow_line");
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handleHotkeyKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleHotkeyKeyDown);
     };
   }, []);
 
@@ -2128,7 +2190,7 @@ export const KanbanBoard: React.FC = () => {
               justifyContent: "center",
               transition: "all 0.2s",
             }}
-            title="Select Tool"
+            title="Select Tool (S)"
           >
             <MousePointer size={18} />
           </button>
@@ -2148,7 +2210,7 @@ export const KanbanBoard: React.FC = () => {
               justifyContent: "center",
               transition: "all 0.2s",
             }}
-            title="Brush Tool"
+            title="Brush Tool (B)"
           >
             <Edit2 size={18} />
           </button>
@@ -2168,7 +2230,7 @@ export const KanbanBoard: React.FC = () => {
               justifyContent: "center",
               transition: "all 0.2s",
             }}
-            title="Eraser Tool"
+            title="Eraser Tool (E)"
           >
             <Eraser size={18} />
           </button>
@@ -2188,7 +2250,7 @@ export const KanbanBoard: React.FC = () => {
               justifyContent: "center",
               transition: "all 0.2s",
             }}
-            title="Text Tool"
+            title="Text Tool (T)"
           >
             <Type size={18} />
           </button>
@@ -2208,7 +2270,7 @@ export const KanbanBoard: React.FC = () => {
               justifyContent: "center",
               transition: "all 0.2s",
             }}
-            title="Rectangle Outline"
+            title="Rectangle (R)"
           >
             <Square size={18} />
           </button>
@@ -2228,7 +2290,7 @@ export const KanbanBoard: React.FC = () => {
               justifyContent: "center",
               transition: "all 0.2s",
             }}
-            title="Filled Rectangle"
+            title="Filled Rectangle (F)"
           >
             <Square size={18} style={{ fill: "currentColor" }} />
           </button>
@@ -2248,7 +2310,7 @@ export const KanbanBoard: React.FC = () => {
               justifyContent: "center",
               transition: "all 0.2s",
             }}
-            title="Ellipse Outline"
+            title="Ellipse (C)"
           >
             <Circle size={18} />
           </button>
@@ -2268,9 +2330,29 @@ export const KanbanBoard: React.FC = () => {
               justifyContent: "center",
               transition: "all 0.2s",
             }}
-            title="Filled Ellipse"
+            title="Filled Ellipse (O)"
           >
             <Circle size={18} style={{ fill: "currentColor" }} />
+          </button>
+
+          {/* Line Tool */}
+          <button
+            onClick={() => setActiveTool("line")}
+            style={{
+              background: activeTool === "line" ? "rgba(255, 255, 255, 0.12)" : "transparent",
+              border: "none",
+              borderRadius: 8,
+              padding: 8,
+              color: activeTool === "line" ? "#38bdf8" : "#94a3b8",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "all 0.2s",
+            }}
+            title="Line Tool (L)"
+          >
+            <Minus size={18} style={{ transform: "rotate(-45deg)" }} />
           </button>
 
           {/* Arrow Tool */}
@@ -2288,7 +2370,7 @@ export const KanbanBoard: React.FC = () => {
               justifyContent: "center",
               transition: "all 0.2s",
             }}
-            title="Arrow Line"
+            title="Arrow Tool (V)"
           >
             <ArrowUpRight size={18} />
           </button>
@@ -2411,6 +2493,7 @@ export const KanbanBoard: React.FC = () => {
       {/* Floating interactive text input textarea element */}
       {activeTextInput && (
         <textarea
+          ref={textInputRef}
           autoFocus
           value={textInputValue}
           onChange={(e) => setTextInputValue(e.target.value)}
@@ -2424,21 +2507,16 @@ export const KanbanBoard: React.FC = () => {
             }
           }}
           style={{
-            position: "fixed",
+            position: "absolute",
             left: activeTextInput.clientX,
             top: activeTextInput.clientY,
-            zIndex: 80,
-            background: "rgba(15, 23, 42, 0.95)",
-            border: "1.5px solid #38bdf8",
-            borderRadius: 6,
-            color: "white",
-            padding: "6px 10px",
-            font: `${brushSize * 2 + 14}px sans-serif`,
+            background: "transparent",
+            border: "none",
             outline: "none",
-            minWidth: 160,
-            minHeight: 44,
-            resize: "both",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
+            color: brushColor,
+            font: "14px sans-serif",
+            resize: "none",
+            zIndex: 100,
           }}
         />
       )}
