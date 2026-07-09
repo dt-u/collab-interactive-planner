@@ -32,7 +32,8 @@ export function useDrawingPaths(
   canvasRef: React.RefObject<HTMLCanvasElement>,
   activeTool: ActiveToolType,
   brushColor: string,
-  brushSize: number
+  brushSize: number,
+  activeTextInputId?: string | null
 ) {
   const [elementsVersion, setElementsVersion] = useState(0);
   const [currentPreviewElement, setCurrentPreviewElement] = useState<CanvasElement | null>(null);
@@ -42,6 +43,11 @@ export function useDrawingPaths(
   const isDrawingRef = useRef(false);
   const startPointRef = useRef<{ x: number; y: number } | null>(null);
   const activeElementIdRef = useRef<string | null>(null);
+  const activeTextInputIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    activeTextInputIdRef.current = activeTextInputId || null;
+  }, [activeTextInputId]);
 
   // Synchronize Yjs canvasElements Shared Map with local ref cache
   useEffect(() => {
@@ -149,7 +155,7 @@ export function useDrawingPaths(
             break;
 
           case "text":
-            ctx.font = `${el.strokeWidth * 3 + 14}px sans-serif`;
+            ctx.font = "bold 24px sans-serif";
             ctx.textBaseline = "top";
             ctx.fillText(el.textData ?? "", el.x, el.y);
             break;
@@ -169,6 +175,9 @@ export function useDrawingPaths(
 
       // Draw all confirmed canvas elements
       yjsElementsRef.current.forEach((el) => {
+        if (activeTextInputIdRef.current && el.id === activeTextInputIdRef.current) {
+          return;
+        }
         drawElement(el);
       });
 

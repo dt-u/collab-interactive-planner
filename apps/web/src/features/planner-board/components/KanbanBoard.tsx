@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useRef } from "react";
+import React, { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useNavigate, useOutletContext } from "react-router-dom";
 import * as Y from "yjs";
@@ -393,6 +393,11 @@ export const KanbanBoard: React.FC = () => {
   const drawingCanvasRef = useRef<HTMLCanvasElement>(null);
   const minimapDragStart = useRef<{ x: number; y: number; pan: { x: number; y: number } } | null>(null);
 
+  // Selector mode element dragging state
+  const [activeDraggedElementId, setActiveDraggedElementId] = useState<string | null>(null);
+  const [dragStartPoint, setDragStartPoint] = useState<{ x: number; y: number } | null>(null);
+  const [dragStartElementPos, setDragStartElementPos] = useState<{ x: number; y: number } | null>(null);
+
   // Floating text input temporary state
   const [activeTextInput, setActiveTextInput] = useState<{
     id: string;
@@ -410,27 +415,32 @@ export const KanbanBoard: React.FC = () => {
     }
   }, [activeTextInput]);
 
+  useEffect(() => {
+    const handleGlobalMouseUp = () => {
+      setActiveDraggedElementId(null);
+      setDragStartPoint(null);
+      setDragStartElementPos(null);
+    };
+    window.addEventListener("mouseup", handleGlobalMouseUp);
+    return () => window.removeEventListener("mouseup", handleGlobalMouseUp);
+  }, []);
+
   const commitTextInput = () => {
     if (!activeTextInput) return;
     const val = textInputValue.trim();
     if (val && yDoc) {
-      const canvas = drawingCanvasRef.current;
-      if (canvas) {
-        const rect = canvas.getBoundingClientRect();
-        const normalizedX = (activeTextInput.clientX - rect.left) / zoom;
-        const normalizedY = (activeTextInput.clientY - rect.top) / zoom;
-
-        const yjsElements = yDoc.getMap<CanvasElement>("canvasElements");
-        yjsElements.set(activeTextInput.id, {
-          id: activeTextInput.id,
-          type: "text",
-          x: normalizedX,
-          y: normalizedY,
-          color: brushColor,
-          strokeWidth: brushSize,
-          textData: val,
-        });
-      }
+      const yjsElements = yDoc.getMap<CanvasElement>("canvasElements");
+      yjsElements.set(activeTextInput.id, {
+        id: activeTextInput.id,
+        type: "text",
+        x: activeTextInput.x,
+        y: activeTextInput.y,
+        color: brushColor,
+        strokeWidth: brushSize,
+        textData: val,
+        width: 240,
+        height: 80,
+      });
     }
     setActiveTextInput(null);
   };
@@ -440,7 +450,8 @@ export const KanbanBoard: React.FC = () => {
     drawingCanvasRef,
     activeTool,
     brushColor,
-    brushSize
+    brushSize,
+    activeTextInput?.id
   );
 
   // Shared Yjs Map positions for day columns
@@ -474,8 +485,49 @@ export const KanbanBoard: React.FC = () => {
     };
   }, [yDoc, activeId]);
 
+  const findIntersectingElement = useCallback(
+    (canvasX: number, canvasY: number): string | null => {
+      if (!yDoc) return null;
+      const yjsElements = yDoc.getMap<CanvasElement>("canvasElements");
+      let foundId: string | null = null;
+
+      yjsElements.forEach((el, id) => {
+        let xmin = el.x;
+        let xmax = el.x + (el.width ?? 0);
+        let ymin = el.y;
+        let ymax = el.y + (el.height ?? 0);
+
+        if (el.type === "arrow" || el.type === "line") {
+          xmin = Math.min(el.x, el.x + (el.width ?? 0));
+          xmax = Math.max(el.x, el.x + (el.width ?? 0));
+          ymin = Math.min(el.y, el.y + (el.height ?? 0));
+          ymax = Math.max(el.y, el.y + (el.height ?? 0));
+        } else if (el.type === "text" && el.width === undefined) {
+          xmax = el.x + 240;
+          ymax = el.y + 80;
+        }
+
+        const margin = 10;
+        if (
+          canvasX >= xmin - margin &&
+          canvasX <= xmax + margin &&
+          canvasY >= ymin - margin &&
+          canvasY <= ymax + margin
+        ) {
+          foundId = id;
+        }
+      });
+
+      return foundId;
+    },
+    [yDoc]
+  );
+
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (activeTool === "select") return;
+    if (activeTextInput) {
+      commitTextInput();
+    }
+
     if (e.buttons !== 1) return;
     const canvas = drawingCanvasRef.current;
     if (!canvas) return;
@@ -483,7 +535,24 @@ export const KanbanBoard: React.FC = () => {
     const x = (e.clientX - rect.left) / zoom;
     const y = (e.clientY - rect.top) / zoom;
 
+    if (activeTool === "select") {
+      const clickedId = findIntersectingElement(x, y);
+      if (clickedId && yDoc) {
+        e.stopPropagation();
+        const yjsElements = yDoc.getMap<CanvasElement>("canvasElements");
+        const el = yjsElements.get(clickedId);
+        if (el) {
+          setActiveDraggedElementId(clickedId);
+          setDragStartPoint({ x, y });
+          setDragStartElementPos({ x: el.x, y: el.y });
+        }
+      }
+      return;
+    }
+
     if (activeTool === "text") {
+      e.stopPropagation();
+      e.preventDefault();
       setActiveTextInput({
         id: `el_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
         x,
@@ -498,6 +567,29 @@ export const KanbanBoard: React.FC = () => {
   };
 
   const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (activeDraggedElementId && dragStartPoint && dragStartElementPos && yDoc) {
+      e.stopPropagation();
+      const canvas = drawingCanvasRef.current;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / zoom;
+      const y = (e.clientY - rect.top) / zoom;
+
+      const dx = x - dragStartPoint.x;
+      const dy = y - dragStartPoint.y;
+
+      const yjsElements = yDoc.getMap<CanvasElement>("canvasElements");
+      const el = yjsElements.get(activeDraggedElementId);
+      if (el) {
+        yjsElements.set(activeDraggedElementId, {
+          ...el,
+          x: dragStartElementPos.x + dx,
+          y: dragStartElementPos.y + dy,
+        });
+      }
+      return;
+    }
+
     if (activeTool === "select" || activeTool === "text") return;
     if (e.buttons !== 1) return;
     const canvas = drawingCanvasRef.current;
@@ -509,7 +601,43 @@ export const KanbanBoard: React.FC = () => {
   };
 
   const handleCanvasMouseUp = () => {
+    setActiveDraggedElementId(null);
+    setDragStartPoint(null);
+    setDragStartElementPos(null);
     endDrawing();
+  };
+
+  const handleCanvasDoubleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (activeTool !== "select") return;
+    const canvas = drawingCanvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const canvasX = (e.clientX - rect.left) / zoom;
+    const canvasY = (e.clientY - rect.top) / zoom;
+
+    const clickedId = findIntersectingElement(canvasX, canvasY);
+    if (clickedId && yDoc) {
+      const yjsElements = yDoc.getMap<CanvasElement>("canvasElements");
+      const el = yjsElements.get(clickedId);
+      if (el && el.type === "text") {
+        e.stopPropagation();
+        e.preventDefault();
+
+        // Calculate screen-relative coordinates for matching input position
+        const canvasAreaRect = canvasRef.current?.getBoundingClientRect() || { left: 0, top: 0 };
+        const relativeLeft = el.x * zoom + rect.left;
+        const relativeTop = el.y * zoom + rect.top;
+
+        setActiveTextInput({
+          id: el.id,
+          x: el.x,
+          y: el.y,
+          clientX: relativeLeft,
+          clientY: relativeTop,
+        });
+        setTextInputValue(el.textData ?? "");
+      }
+    }
   };
 
   // Touch viewport controls refs
@@ -1795,7 +1923,7 @@ export const KanbanBoard: React.FC = () => {
             }}
           >
             {/* HTML5 drawing canvas aligned with the infinite canvas bounds */}
-            <canvas
+             <canvas
               ref={drawingCanvasRef}
               width={8000}
               height={8000}
@@ -1807,17 +1935,18 @@ export const KanbanBoard: React.FC = () => {
                 height: "8000px",
                 background: "transparent",
                 backgroundColor: "transparent",
-                zIndex: activeTool !== "select" ? 25 : -1,
-                pointerEvents: activeTool !== "select" ? "auto" : "none",
+                zIndex: activeTool !== "select" ? 25 : 5,
+                pointerEvents: "auto",
                 cursor: activeTool === "brush" ? "crosshair" : activeTool === "eraser" ? "cell" : "default",
               }}
               onMouseDown={handleCanvasMouseDown}
               onMouseMove={handleCanvasMouseMove}
               onMouseUp={handleCanvasMouseUp}
               onMouseLeave={handleCanvasMouseUp}
+              onDoubleClick={handleCanvasDoubleClick}
             />
 
-            <div className="board-columns-list">
+            <div className="board-columns-list" style={{ position: "relative", zIndex: 10 }}>
               {columnOrder.map((colId, index) => {
                 const taskIds = columns[colId] || [];
                 const metadata = columnMetadata[colId];
@@ -1970,6 +2099,69 @@ export const KanbanBoard: React.FC = () => {
                   );
                 }
               })}
+            {/* Floating interactive text input textarea element inside transformed viewport */}
+            {activeTextInput && (
+              <textarea
+                ref={textInputRef}
+                autoFocus
+                value={textInputValue}
+                onPointerDown={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+                onChange={(e) => {
+                  const newVal = e.target.value;
+                  setTextInputValue(newVal);
+
+                  if (activeTextInput && yDoc) {
+                    const yjsElements = yDoc.getMap<CanvasElement>("canvasElements");
+                    const existing = yjsElements.get(activeTextInput.id);
+                    const color = existing?.color ?? brushColor;
+                    const strokeWidth = existing?.strokeWidth ?? brushSize;
+
+                    yjsElements.set(activeTextInput.id, {
+                      id: activeTextInput.id,
+                      type: "text",
+                      x: activeTextInput.x,
+                      y: activeTextInput.y,
+                      color,
+                      strokeWidth,
+                      textData: newVal,
+                      width: 240,
+                      height: 80,
+                    });
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    commitTextInput();
+                  } else if (e.key === "Escape") {
+                    setActiveTextInput(null);
+                  }
+                }}
+                style={{
+                  position: "absolute",
+                  left: `${activeTextInput.x - 4000}px`,
+                  top: `${activeTextInput.y - 4000}px`,
+                  width: "auto",
+                  minWidth: "300px",
+                  height: "auto",
+                  minHeight: "40px",
+                  background: "transparent",
+                  border: "none",
+                  outline: "none",
+                  boxShadow: "none",
+                  padding: "0px",
+                  margin: "0px",
+                  color: brushColor,
+                  font: "bold 24px sans-serif",
+                  lineHeight: "1.2",
+                  resize: "none",
+                  overflow: "hidden",
+                  caretColor: brushColor,
+                  zIndex: 999999,
+                }}
+              />
+            )}
           </div>
 
           {/* Remote Cursors Overlay (Outside viewport to prevent double-scaling multiplication issues) */}
@@ -2495,41 +2687,7 @@ export const KanbanBoard: React.FC = () => {
             })()}
           </div>
         </div>
-          {/* Floating interactive text input textarea element inside 100% scale layer */}
-          {activeTextInput && (
-            <textarea
-              ref={textInputRef}
-              autoFocus
-              value={textInputValue}
-              onChange={(e) => setTextInputValue(e.target.value)}
-              onBlur={commitTextInput}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  commitTextInput();
-                } else if (e.key === "Escape") {
-                  setActiveTextInput(null);
-                }
-              }}
-              style={{
-                position: "absolute",
-                left: activeTextInput.clientX - (canvasRef.current?.getBoundingClientRect().left ?? 0),
-                top: activeTextInput.clientY - (canvasRef.current?.getBoundingClientRect().top ?? 0),
-                width: "240px",
-                height: "80px",
-                background: "rgba(30, 30, 40, 0.85)",
-                backdropFilter: "blur(8px)",
-                border: "1px solid rgba(255, 255, 255, 0.2)",
-                borderRadius: "6px",
-                padding: "8px",
-                color: brushColor,
-                font: "14px sans-serif",
-                outline: "none",
-                resize: "none",
-                zIndex: 9999,
-              }}
-            />
-          )}
+
       </div>
 
       {/* Task Edit Modal Overlay */}
