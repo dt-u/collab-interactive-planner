@@ -223,7 +223,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     <div className="modal-backdrop" onClick={onClose}>
       <div
         className="modal-card"
-        style={{ maxWidth: 880, width: "95%", padding: 24 }}
+        style={{ maxWidth: 880, width: "95%", maxHeight: "90vh", display: "flex", flexDirection: "column", padding: 24 }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
@@ -235,6 +235,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
             borderBottom: "1px solid var(--border-color)",
             paddingBottom: 16,
             marginBottom: 20,
+            flexShrink: 0,
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -257,7 +258,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
         </div>
 
         {/* Modal Content Grid */}
-        <div className="task-detail-grid">
+        <div className="task-detail-grid" style={{ overflowY: "auto", flex: 1, paddingRight: 4 }}>
           {/* Main Column */}
           <div className="detail-main-col">
             <div className="form-group">

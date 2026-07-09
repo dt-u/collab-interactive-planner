@@ -36,7 +36,7 @@ import {
 import { httpClient } from "../../../shared/api/http-client.js";
 import { BoardTaskCard } from "./BoardTaskCard.js";
 import { TaskDetailModal } from "./TaskDetailModal.js";
-import { Plus, ArrowLeft, Trash2, X, Copy, MapPin, Menu, Settings, Edit2, CheckCircle2, AlertCircle, Crosshair, MousePointer, Eraser, Type, Square, Circle, ArrowUpRight, Minus } from "lucide-react";
+import { Plus, ArrowLeft, Trash2, X, Copy, MapPin, Menu, Settings, Edit2, CheckCircle2, AlertCircle, Crosshair, MousePointer, Eraser, Type, Square, Circle, ArrowUpRight, Minus, ChevronUp, ChevronDown } from "lucide-react";
 import { Spinner } from "../../../shared/ui/spinner/Spinner.js";
 
 interface ColumnCardsContainerProps {
@@ -184,24 +184,6 @@ const WhiteboardColumn: React.FC<WhiteboardColumnProps> = ({
                 >
                   {columnTitle}
                 </h3>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleStartEditColumn(colId, columnTitle);
-                  }}
-                  style={{
-                    background: "transparent",
-                    border: "none",
-                    color: "#94a3b8",
-                    cursor: "pointer",
-                    padding: 2,
-                    display: "flex",
-                    alignItems: "center",
-                  }}
-                  title="Rename Day"
-                >
-                  <Edit2 size={12} />
-                </button>
               </div>
             )}
             <p style={{ fontSize: 11, color: "#94a3b8", fontWeight: 500, marginTop: 2 }}>
@@ -414,6 +396,8 @@ export const KanbanBoard: React.FC = () => {
   } | null>(null);
   const [textInputValue, setTextInputValue] = useState("");
   const textInputRef = useRef<HTMLTextAreaElement>(null);
+
+  const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false);
 
   useEffect(() => {
     if (activeTextInput && textInputRef.current) {
@@ -1565,7 +1549,7 @@ export const KanbanBoard: React.FC = () => {
         x: columnOrder.indexOf(colId) * 360,
         y: 0,
       };
-      
+
       const currentX = startPos.x + delta.x / zoom;
       const currentY = startPos.y + delta.y / zoom;
 
@@ -1617,16 +1601,16 @@ export const KanbanBoard: React.FC = () => {
         x: columnOrder.indexOf(colId) * 360,
         y: 0,
       };
-      
+
       const finalX = startPos.x + delta.x / zoom;
       const finalY = startPos.y + delta.y / zoom;
-      
+
       // Update local state immediately so there's zero jump/flicker
       setLocalColPositions((prev) => ({
         ...prev,
         [colId]: { x: finalX, y: finalY },
       }));
-      
+
       if (yDoc) {
         const colPosMap = yDoc.getMap("columnPositions");
         colPosMap.set(colId, { x: finalX, y: finalY });
@@ -1728,9 +1712,26 @@ export const KanbanBoard: React.FC = () => {
       const orderArray = getSharedColumnOrder(yDoc);
       const metadataMap = getSharedColumnMetadata(yDoc);
       const columnsMap = getSharedColumns(yDoc);
+      const colPosMap = yDoc.getMap<any>("columnPositions");
 
       const nextIndex = orderArray.length + 1;
       const colId = `day_${nextIndex}_` + Math.random().toString(36).substring(2, 6);
+
+      // Find the maximum horizontal position maxX among current columns
+      let maxX = -380;
+      colPosMap.forEach((pos) => {
+        if (pos && typeof pos.x === "number") {
+          maxX = Math.max(maxX, pos.x);
+        }
+      });
+      // Fallback if positions map is empty but there are elements in orderArray
+      if (maxX === -380 && orderArray.length > 0) {
+        maxX = (orderArray.length - 1) * 380;
+      }
+
+      const newX = maxX + 380;
+      const newY = 0; // standardOriginY
+      colPosMap.set(colId, { x: newX, y: newY });
 
       orderArray.push([colId]);
       metadataMap.set(colId, { id: colId, title: `DAY ${nextIndex}: NEW DAY` });
@@ -2070,6 +2071,61 @@ export const KanbanBoard: React.FC = () => {
         </div>
       </header>
 
+      {/* Whiteboard Day Quick-Navigation Floating Bar */}
+      <div
+        style={{
+          position: "absolute",
+          top: 80,
+          left: "50%",
+          transform: "translateX(-50%)",
+          display: "flex",
+          gap: 8,
+          background: "var(--glass-bg)",
+          border: "1px solid var(--glass-border)",
+          padding: "6px 12px",
+          borderRadius: 12,
+          boxShadow: "var(--glass-shadow)",
+          backdropFilter: "blur(10px)",
+          zIndex: 30,
+        }}
+      >
+        {columnOrder.map((colId, idx) => (
+          <button
+            key={`nav-day-${colId}`}
+            onClick={() => {
+              const colPos = localColPositions[colId] || { x: idx * 360, y: 0 };
+              const targetColX = colPos.x + 160;
+              const targetColY = colPos.y + 300;
+              setPan({
+                x: window.innerWidth / 2 - targetColX * zoom,
+                y: window.innerHeight / 2 - targetColY * zoom,
+              });
+            }}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "var(--text-muted)",
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+              padding: "4px 8px",
+              borderRadius: 6,
+              transition: "all 0.2s",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.08)";
+              e.currentTarget.style.color = "#38bdf8";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = "transparent";
+              e.currentTarget.style.color = "var(--text-muted)";
+            }}
+          >
+            Day {idx + 1}
+          </button>
+        ))}
+      </div>
+
       {/* Board Canvas (Figma-style pan/zoom handlers attached) */}
       <div
         className="board-canvas-area whiteboard"
@@ -2114,7 +2170,7 @@ export const KanbanBoard: React.FC = () => {
             }}
           >
             {/* HTML5 drawing canvas aligned with the infinite canvas bounds */}
-             <canvas
+            <canvas
               ref={drawingCanvasRef}
               width={8000}
               height={8000}
@@ -2175,10 +2231,10 @@ export const KanbanBoard: React.FC = () => {
               {/* Add Column button */}
               {(() => {
                 const lastColX = columnOrder.reduce((maxX, colId, idx) => {
-                  const pos = localColPositions[colId] || { x: idx * 360, y: 0 };
+                  const pos = localColPositions[colId] || { x: idx * 380, y: 0 };
                   return Math.max(maxX, pos.x);
-                }, -360);
-                const addBtnX = lastColX + 360;
+                }, -380);
+                const addBtnX = lastColX + 380;
 
                 return (
                   <button
@@ -2207,7 +2263,7 @@ export const KanbanBoard: React.FC = () => {
               })()}
             </div>
 
-            
+
 
             {/* Remote Dragging Ghosts Overlay (Floating dashed bounding box previews) */}
             {remoteCursors
@@ -2543,271 +2599,336 @@ export const KanbanBoard: React.FC = () => {
         </div>
 
         {/* Floating Drawing Toolbar */}
-        <div
-          className="hidden md:flex"
-          style={{
-            display: "flex",
-            flexDirection: "row",
-            position: "absolute",
-            bottom: 24,
-            left: "50%",
-            transform: "translateX(-50%)",
-            zIndex: 60,
-            backgroundColor: "rgba(15, 23, 42, 0.75)",
-            backdropFilter: "blur(12px)",
-            border: "1px solid rgba(255, 255, 255, 0.08)",
-            borderRadius: 16,
-            padding: "8px 16px",
-            alignItems: "center",
-            gap: 16,
-            boxShadow: "0 8px 32px rgba(0, 0, 0, 0.4)",
-          }}
-          onMouseDown={(e) => e.stopPropagation()}
-          onPointerDown={(e) => e.stopPropagation()}
-        >
-          {/* Pointer Selector */}
-          <button
-            onClick={() => setActiveTool("select")}
+        {isToolbarCollapsed ? (
+          <div
+            className="hidden md:flex"
             style={{
-              background: activeTool === "select" ? "rgba(255, 255, 255, 0.12)" : "transparent",
-              border: "none",
-              borderRadius: 8,
-              padding: 8,
-              color: activeTool === "select" ? "#38bdf8" : "#94a3b8",
-              cursor: "pointer",
               display: "flex",
+              flexDirection: "row",
+              position: "absolute",
+              bottom: 24,
+              left: "50%",
+              transform: "translateX(-50%)",
+              zIndex: 60,
+              backgroundColor: "rgba(15, 23, 42, 0.75)",
+              backdropFilter: "blur(12px)",
+              border: "1px solid rgba(255, 255, 255, 0.08)",
+              borderRadius: 16,
+              padding: "8px 16px",
               alignItems: "center",
-              justifyContent: "center",
-              transition: "all 0.2s",
+              boxShadow: "0 8px 32px rgba(0, 0, 0, 0.4)",
             }}
-            title="Select Tool (C)"
+            onMouseDown={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
           >
-            <MousePointer size={18} />
-          </button>
-
-          {/* Brush Tool */}
-          <button
-            onClick={() => setActiveTool("brush")}
+            <button
+              onClick={() => setIsToolbarCollapsed(false)}
+              style={{
+                background: "transparent",
+                border: "none",
+                borderRadius: 8,
+                padding: 4,
+                color: "#94a3b8",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "all 0.2s",
+              }}
+              title="Expand Drawing Toolbar"
+            >
+              <ChevronUp size={18} />
+            </button>
+          </div>
+        ) : (
+          <div
+            className="hidden md:flex"
             style={{
-              background: activeTool === "brush" ? "rgba(255, 255, 255, 0.12)" : "transparent",
-              border: "none",
-              borderRadius: 8,
-              padding: 8,
-              color: activeTool === "brush" ? "#38bdf8" : "#94a3b8",
-              cursor: "pointer",
               display: "flex",
+              flexDirection: "row",
+              position: "absolute",
+              bottom: 24,
+              left: "50%",
+              transform: "translateX(-50%)",
+              zIndex: 60,
+              backgroundColor: "rgba(15, 23, 42, 0.75)",
+              backdropFilter: "blur(12px)",
+              border: "1px solid rgba(255, 255, 255, 0.08)",
+              borderRadius: 16,
+              padding: "8px 16px",
               alignItems: "center",
-              justifyContent: "center",
-              transition: "all 0.2s",
+              gap: 16,
+              boxShadow: "0 8px 32px rgba(0, 0, 0, 0.4)",
             }}
-            title="Brush Tool (B)"
+            onMouseDown={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
           >
-            <Edit2 size={18} />
-          </button>
+            {/* Pointer Selector */}
+            <button
+              onClick={() => setActiveTool("select")}
+              style={{
+                background: activeTool === "select" ? "rgba(255, 255, 255, 0.12)" : "transparent",
+                border: "none",
+                borderRadius: 8,
+                padding: 8,
+                color: activeTool === "select" ? "#38bdf8" : "#94a3b8",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "all 0.2s",
+              }}
+              title="Select Tool (C)"
+            >
+              <MousePointer size={18} />
+            </button>
 
-          {/* Eraser Tool */}
-          <button
-            onClick={() => setActiveTool("eraser")}
-            style={{
-              background: activeTool === "eraser" ? "rgba(255, 255, 255, 0.12)" : "transparent",
-              border: "none",
-              borderRadius: 8,
-              padding: 8,
-              color: activeTool === "eraser" ? "#38bdf8" : "#94a3b8",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              transition: "all 0.2s",
-            }}
-            title="Eraser Tool (E)"
-          >
-            <Eraser size={18} />
-          </button>
+            {/* Brush Tool */}
+            <button
+              onClick={() => setActiveTool("brush")}
+              style={{
+                background: activeTool === "brush" ? "rgba(255, 255, 255, 0.12)" : "transparent",
+                border: "none",
+                borderRadius: 8,
+                padding: 8,
+                color: activeTool === "brush" ? "#38bdf8" : "#94a3b8",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "all 0.2s",
+              }}
+              title="Brush Tool (B)"
+            >
+              <Edit2 size={18} />
+            </button>
 
-          {/* Text Tool */}
-          <button
-            onClick={() => setActiveTool("text")}
-            style={{
-              background: activeTool === "text" ? "rgba(255, 255, 255, 0.12)" : "transparent",
-              border: "none",
-              borderRadius: 8,
-              padding: 8,
-              color: activeTool === "text" ? "#38bdf8" : "#94a3b8",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              transition: "all 0.2s",
-            }}
-            title="Text Tool (T)"
-          >
-            <Type size={18} />
-          </button>
+            {/* Eraser Tool */}
+            <button
+              onClick={() => setActiveTool("eraser")}
+              style={{
+                background: activeTool === "eraser" ? "rgba(255, 255, 255, 0.12)" : "transparent",
+                border: "none",
+                borderRadius: 8,
+                padding: 8,
+                color: activeTool === "eraser" ? "#38bdf8" : "#94a3b8",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "all 0.2s",
+              }}
+              title="Eraser Tool (E)"
+            >
+              <Eraser size={18} />
+            </button>
 
-          {/* Unfilled Rectangle */}
-          <button
-            onClick={() => setActiveTool("rect_rect")}
-            style={{
-              background: activeTool === "rect_rect" ? "rgba(255, 255, 255, 0.12)" : "transparent",
-              border: "none",
-              borderRadius: 8,
-              padding: 8,
-              color: activeTool === "rect_rect" ? "#38bdf8" : "#94a3b8",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              transition: "all 0.2s",
-            }}
-            title="Rectangle (R)"
-          >
-            <Square size={18} />
-          </button>
+            {/* Text Tool */}
+            <button
+              onClick={() => setActiveTool("text")}
+              style={{
+                background: activeTool === "text" ? "rgba(255, 255, 255, 0.12)" : "transparent",
+                border: "none",
+                borderRadius: 8,
+                padding: 8,
+                color: activeTool === "text" ? "#38bdf8" : "#94a3b8",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "all 0.2s",
+              }}
+              title="Text Tool (T)"
+            >
+              <Type size={18} />
+            </button>
 
-          {/* Filled Rectangle */}
-          <button
-            onClick={() => setActiveTool("rect_fill")}
-            style={{
-              background: activeTool === "rect_fill" ? "rgba(255, 255, 255, 0.12)" : "transparent",
-              border: "none",
-              borderRadius: 8,
-              padding: 8,
-              color: activeTool === "rect_fill" ? "#38bdf8" : "#94a3b8",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              transition: "all 0.2s",
-            }}
-            title="Filled Rectangle (F)"
-          >
-            <Square size={18} style={{ fill: "currentColor" }} />
-          </button>
+            {/* Unfilled Rectangle */}
+            <button
+              onClick={() => setActiveTool("rect_rect")}
+              style={{
+                background: activeTool === "rect_rect" ? "rgba(255, 255, 255, 0.12)" : "transparent",
+                border: "none",
+                borderRadius: 8,
+                padding: 8,
+                color: activeTool === "rect_rect" ? "#38bdf8" : "#94a3b8",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "all 0.2s",
+              }}
+              title="Rectangle (R)"
+            >
+              <Square size={18} />
+            </button>
 
-          {/* Unfilled Ellipse */}
-          <button
-            onClick={() => setActiveTool("ellipse_rect")}
-            style={{
-              background: activeTool === "ellipse_rect" ? "rgba(255, 255, 255, 0.12)" : "transparent",
-              border: "none",
-              borderRadius: 8,
-              padding: 8,
-              color: activeTool === "ellipse_rect" ? "#38bdf8" : "#94a3b8",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              transition: "all 0.2s",
-            }}
-            title="Ellipse (Q)"
-          >
-            <Circle size={18} />
-          </button>
+            {/* Filled Rectangle */}
+            <button
+              onClick={() => setActiveTool("rect_fill")}
+              style={{
+                background: activeTool === "rect_fill" ? "rgba(255, 255, 255, 0.12)" : "transparent",
+                border: "none",
+                borderRadius: 8,
+                padding: 8,
+                color: activeTool === "rect_fill" ? "#38bdf8" : "#94a3b8",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "all 0.2s",
+              }}
+              title="Filled Rectangle (F)"
+            >
+              <Square size={18} style={{ fill: "currentColor" }} />
+            </button>
 
-          {/* Filled Ellipse */}
-          <button
-            onClick={() => setActiveTool("ellipse_fill")}
-            style={{
-              background: activeTool === "ellipse_fill" ? "rgba(255, 255, 255, 0.12)" : "transparent",
-              border: "none",
-              borderRadius: 8,
-              padding: 8,
-              color: activeTool === "ellipse_fill" ? "#38bdf8" : "#94a3b8",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              transition: "all 0.2s",
-            }}
-            title="Filled Ellipse (O)"
-          >
-            <Circle size={18} style={{ fill: "currentColor" }} />
-          </button>
+            {/* Unfilled Ellipse */}
+            <button
+              onClick={() => setActiveTool("ellipse_rect")}
+              style={{
+                background: activeTool === "ellipse_rect" ? "rgba(255, 255, 255, 0.12)" : "transparent",
+                border: "none",
+                borderRadius: 8,
+                padding: 8,
+                color: activeTool === "ellipse_rect" ? "#38bdf8" : "#94a3b8",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "all 0.2s",
+              }}
+              title="Ellipse (Q)"
+            >
+              <Circle size={18} />
+            </button>
 
-          {/* Line Tool */}
-          <button
-            onClick={() => setActiveTool("line")}
-            style={{
-              background: activeTool === "line" ? "rgba(255, 255, 255, 0.12)" : "transparent",
-              border: "none",
-              borderRadius: 8,
-              padding: 8,
-              color: activeTool === "line" ? "#38bdf8" : "#94a3b8",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              transition: "all 0.2s",
-            }}
-            title="Line Tool (L)"
-          >
-            <Minus size={18} style={{ transform: "rotate(-45deg)" }} />
-          </button>
+            {/* Filled Ellipse */}
+            <button
+              onClick={() => setActiveTool("ellipse_fill")}
+              style={{
+                background: activeTool === "ellipse_fill" ? "rgba(255, 255, 255, 0.12)" : "transparent",
+                border: "none",
+                borderRadius: 8,
+                padding: 8,
+                color: activeTool === "ellipse_fill" ? "#38bdf8" : "#94a3b8",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "all 0.2s",
+              }}
+              title="Filled Ellipse (O)"
+            >
+              <Circle size={18} style={{ fill: "currentColor" }} />
+            </button>
 
-          {/* Arrow Tool */}
-          <button
-            onClick={() => setActiveTool("arrow_line")}
-            style={{
-              background: activeTool === "arrow_line" ? "rgba(255, 255, 255, 0.12)" : "transparent",
-              border: "none",
-              borderRadius: 8,
-              padding: 8,
-              color: activeTool === "arrow_line" ? "#38bdf8" : "#94a3b8",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              transition: "all 0.2s",
-            }}
-            title="Arrow Tool (V)"
-          >
-            <ArrowUpRight size={18} />
-          </button>
+            {/* Line Tool */}
+            <button
+              onClick={() => setActiveTool("line")}
+              style={{
+                background: activeTool === "line" ? "rgba(255, 255, 255, 0.12)" : "transparent",
+                border: "none",
+                borderRadius: 8,
+                padding: 8,
+                color: activeTool === "line" ? "#38bdf8" : "#94a3b8",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "all 0.2s",
+              }}
+              title="Line Tool (L)"
+            >
+              <Minus size={18} style={{ transform: "rotate(-45deg)" }} />
+            </button>
 
-          {/* Color Picker Swatches */}
-          {activeTool !== "select" && activeTool !== "eraser" && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, borderLeft: "1px solid rgba(255, 255, 255, 0.1)", paddingLeft: 16 }}>
-              {["#38bdf8", "#f43f5e", "#10b981", "#fbbf24", "#a855f7"].map((color) => (
-                <button
-                  key={color}
-                  onClick={() => setBrushColor(color)}
+            {/* Arrow Tool */}
+            <button
+              onClick={() => setActiveTool("arrow_line")}
+              style={{
+                background: activeTool === "arrow_line" ? "rgba(255, 255, 255, 0.12)" : "transparent",
+                border: "none",
+                borderRadius: 8,
+                padding: 8,
+                color: activeTool === "arrow_line" ? "#38bdf8" : "#94a3b8",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "all 0.2s",
+              }}
+              title="Arrow Tool (V)"
+            >
+              <ArrowUpRight size={18} />
+            </button>
+
+            {/* Color Picker Swatches */}
+            {activeTool !== "select" && activeTool !== "eraser" && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, borderLeft: "1px solid rgba(255, 255, 255, 0.1)", paddingLeft: 16 }}>
+                {["#38bdf8", "#f43f5e", "#10b981", "#fbbf24", "#a855f7"].map((color) => (
+                  <button
+                    key={color}
+                    onClick={() => setBrushColor(color)}
+                    style={{
+                      width: 18,
+                      height: 18,
+                      borderRadius: "50%",
+                      backgroundColor: color,
+                      border: brushColor === color ? "2px solid white" : "none",
+                      cursor: "pointer",
+                      padding: 0,
+                      transform: brushColor === color ? "scale(1.15)" : "none",
+                      transition: "all 0.15s",
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Brush Size Slider */}
+            {activeTool !== "select" && activeTool !== "eraser" && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, borderLeft: "1px solid rgba(255, 255, 255, 0.1)", paddingLeft: 16 }}>
+                <span style={{ fontSize: 11, color: "#94a3b8" }}>Size:</span>
+                <input
+                  type="range"
+                  min={2}
+                  max={24}
+                  value={brushSize}
+                  onChange={(e) => setBrushSize(Number(e.target.value))}
                   style={{
-                    width: 18,
-                    height: 18,
-                    borderRadius: "50%",
-                    backgroundColor: color,
-                    border: brushColor === color ? "2px solid white" : "none",
+                    width: 72,
+                    accentColor: "#38bdf8",
                     cursor: "pointer",
-                    padding: 0,
-                    transform: brushColor === color ? "scale(1.15)" : "none",
-                    transition: "all 0.15s",
                   }}
                 />
-              ))}
-            </div>
-          )}
+                <span style={{ fontSize: 11, color: "#94a3b8", width: 14 }}>{brushSize}</span>
+              </div>
+            )}
 
-          {/* Brush Size Slider */}
-          {activeTool !== "select" && activeTool !== "eraser" && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, borderLeft: "1px solid rgba(255, 255, 255, 0.1)", paddingLeft: 16 }}>
-              <span style={{ fontSize: 11, color: "#94a3b8" }}>Size:</span>
-              <input
-                type="range"
-                min={2}
-                max={24}
-                value={brushSize}
-                onChange={(e) => setBrushSize(Number(e.target.value))}
-                style={{
-                  width: 72,
-                  accentColor: "#38bdf8",
-                  cursor: "pointer",
-                }}
-              />
-              <span style={{ fontSize: 11, color: "#94a3b8", width: 14 }}>{brushSize}</span>
-            </div>
-          )}
-        </div>
+            {/* Collapse button */}
+            <button
+              onClick={() => setIsToolbarCollapsed(true)}
+              style={{
+                background: "transparent",
+                border: "none",
+                borderRadius: 8,
+                padding: 8,
+                color: "#94a3b8",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "all 0.2s",
+                borderLeft: "1px solid rgba(255, 255, 255, 0.1)",
+                paddingLeft: 16,
+              }}
+              title="Collapse Toolbar"
+            >
+              <ChevronDown size={18} />
+            </button>
+          </div>
+        )}
 
         {/* Floating Whiteboard Minimap Container */}
         <div
