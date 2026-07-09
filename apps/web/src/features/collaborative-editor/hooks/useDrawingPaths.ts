@@ -3,7 +3,7 @@ import * as Y from "yjs";
 
 export interface CanvasElement {
   id: string;
-  type: "path" | "text" | "rectangle" | "ellipse" | "arrow" | "line";
+  type: "path" | "text" | "rectangle" | "ellipse" | "arrow" | "line" | "image";
   x: number;
   y: number;
   width?: number;
@@ -13,6 +13,7 @@ export interface CanvasElement {
   fill?: boolean;
   textData?: string;
   points?: number[]; // [x1, y1, x2, y2, ...] flat coordinates for paths
+  src?: string; // base64 string payload for images
 }
 
 export type ActiveToolType =
@@ -26,6 +27,25 @@ export type ActiveToolType =
   | "ellipse_fill"
   | "line"
   | "arrow_line";
+
+const imageCache = new Map<string, HTMLImageElement>();
+
+const getImage = (src: string, onLoad: () => void): HTMLImageElement | null => {
+  if (imageCache.has(src)) {
+    const img = imageCache.get(src)!;
+    if (img.complete && img.naturalWidth !== 0) {
+      return img;
+    }
+    return img;
+  }
+  const img = new Image();
+  img.onload = () => {
+    onLoad();
+  };
+  img.src = src;
+  imageCache.set(src, img);
+  return null;
+};
 
 export function useDrawingPaths(
   yDoc: Y.Doc | null,
@@ -158,6 +178,20 @@ export function useDrawingPaths(
             ctx.font = "bold 24px sans-serif";
             ctx.textBaseline = "top";
             ctx.fillText(el.textData ?? "", el.x, el.y);
+            break;
+
+          case "image":
+            if (el.src) {
+              const img = getImage(el.src, () => {
+                setElementsVersion((v) => v + 1);
+              });
+              if (img) {
+                ctx.drawImage(img, el.x, el.y, el.width ?? 300, el.height ?? 300);
+              } else {
+                ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
+                ctx.strokeRect(el.x, el.y, el.width ?? 300, el.height ?? 300);
+              }
+            }
             break;
 
           case "path":

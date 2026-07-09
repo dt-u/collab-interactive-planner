@@ -385,6 +385,7 @@ export const KanbanBoard: React.FC = () => {
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const spacePressed = useRef(false);
+  const pressedKeysRef = useRef<Record<string, boolean>>({});
 
   // Collaborative Drawing States
   const [activeTool, setActiveTool] = useState<ActiveToolType>("select");
@@ -397,6 +398,11 @@ export const KanbanBoard: React.FC = () => {
   const [activeDraggedElementId, setActiveDraggedElementId] = useState<string | null>(null);
   const [dragStartPoint, setDragStartPoint] = useState<{ x: number; y: number } | null>(null);
   const [dragStartElementPos, setDragStartElementPos] = useState<{ x: number; y: number } | null>(null);
+
+  // Image resizing state
+  const [activeResizingElementId, setActiveResizingElementId] = useState<string | null>(null);
+  const [resizeStartPoint, setResizeStartPoint] = useState<{ x: number; y: number } | null>(null);
+  const [resizeStartSize, setResizeStartSize] = useState<{ width: number; height: number } | null>(null);
 
   // Floating text input temporary state
   const [activeTextInput, setActiveTextInput] = useState<{
@@ -420,10 +426,15 @@ export const KanbanBoard: React.FC = () => {
       setActiveDraggedElementId(null);
       setDragStartPoint(null);
       setDragStartElementPos(null);
+      setActiveResizingElementId(null);
+      setResizeStartPoint(null);
+      setResizeStartSize(null);
     };
     window.addEventListener("mouseup", handleGlobalMouseUp);
     return () => window.removeEventListener("mouseup", handleGlobalMouseUp);
   }, []);
+
+
 
   const commitTextInput = () => {
     if (!activeTextInput) return;
@@ -485,6 +496,84 @@ export const KanbanBoard: React.FC = () => {
     };
   }, [yDoc, activeId]);
 
+  // 1. WASD Continuous Keyboard Camera Panning & Day Numeric Teleport Hotkeys keydown/keyup listener
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = document.activeElement;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          (target as HTMLElement).isContentEditable)
+      ) {
+        return;
+      }
+
+      // Check for numeric teleport hotkeys 1-9
+      const num = parseInt(e.key, 10);
+      if (!isNaN(num) && num >= 1 && num <= 9) {
+        const colIndex = num - 1;
+        if (colIndex < columnOrder.length) {
+          const colId = columnOrder[colIndex];
+          const colPos = localColPositions[colId] || { x: colIndex * 360, y: 0 };
+          const targetColX = colPos.x + 160;
+          const targetColY = colPos.y + 300;
+          setPan({
+            x: window.innerWidth / 2 - targetColX * zoom,
+            y: window.innerHeight / 2 - targetColY * zoom,
+          });
+          return;
+        }
+      }
+
+      const key = e.key.toLowerCase();
+      if (["w", "a", "s", "d"].includes(key)) {
+        pressedKeysRef.current[key] = true;
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      if (["w", "a", "s", "d"].includes(key)) {
+        pressedKeysRef.current[key] = false;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, [columnOrder, localColPositions, zoom]);
+
+  // 2. Continuous requestAnimationFrame loop for panning key transitions
+  useEffect(() => {
+    let panFrameId: number;
+
+    const panLoop = () => {
+      let dx = 0;
+      let dy = 0;
+
+      // Continuous movement loop increments/decrements layout pan store positions by 8px per frame
+      if (pressedKeysRef.current["w"]) dy += 8;
+      if (pressedKeysRef.current["s"]) dy -= 8;
+      if (pressedKeysRef.current["a"]) dx += 8;
+      if (pressedKeysRef.current["d"]) dx -= 8;
+
+      if (dx !== 0 || dy !== 0) {
+        setPan((prev) => ({
+          x: prev.x + dx,
+          y: prev.y + dy,
+        }));
+      }
+      panFrameId = requestAnimationFrame(panLoop);
+    };
+
+    panLoop();
+    return () => cancelAnimationFrame(panFrameId);
+  }, []);
+
   const findIntersectingElement = useCallback(
     (canvasX: number, canvasY: number): string | null => {
       if (!yDoc) return null;
@@ -523,6 +612,27 @@ export const KanbanBoard: React.FC = () => {
     [yDoc]
   );
 
+  const findResizingElementCorner = useCallback(
+    (canvasX: number, canvasY: number): { id: string; width: number; height: number } | null => {
+      if (!yDoc) return null;
+      const yjsElements = yDoc.getMap<CanvasElement>("canvasElements");
+      let result: { id: string; width: number; height: number } | null = null;
+
+      yjsElements.forEach((el, id) => {
+        if (el.type !== "image") return;
+        const cornerX = el.x + (el.width ?? 300);
+        const cornerY = el.y + (el.height ?? 300);
+        const dist = Math.hypot(canvasX - cornerX, canvasY - cornerY);
+        // Resizing corner activation radius threshold is 20px
+        if (dist <= 20) {
+          result = { id, width: el.width ?? 300, height: el.height ?? 300 };
+        }
+      });
+      return result;
+    },
+    [yDoc]
+  );
+
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (activeTextInput) {
       commitTextInput();
@@ -536,6 +646,15 @@ export const KanbanBoard: React.FC = () => {
     const y = (e.clientY - rect.top) / zoom;
 
     if (activeTool === "select") {
+      const resizeTarget = findResizingElementCorner(x, y);
+      if (resizeTarget) {
+        e.stopPropagation();
+        setActiveResizingElementId(resizeTarget.id);
+        setResizeStartPoint({ x, y });
+        setResizeStartSize({ width: resizeTarget.width, height: resizeTarget.height });
+        return;
+      }
+
       const clickedId = findIntersectingElement(x, y);
       if (clickedId && yDoc) {
         e.stopPropagation();
@@ -567,14 +686,31 @@ export const KanbanBoard: React.FC = () => {
   };
 
   const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = drawingCanvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / zoom;
+    const y = (e.clientY - rect.top) / zoom;
+
+    if (activeResizingElementId && resizeStartPoint && resizeStartSize && yDoc) {
+      e.stopPropagation();
+      const dx = x - resizeStartPoint.x;
+      const dy = y - resizeStartPoint.y;
+
+      const yjsElements = yDoc.getMap<CanvasElement>("canvasElements");
+      const el = yjsElements.get(activeResizingElementId);
+      if (el) {
+        yjsElements.set(activeResizingElementId, {
+          ...el,
+          width: Math.max(40, resizeStartSize.width + dx),
+          height: Math.max(40, resizeStartSize.height + dy),
+        });
+      }
+      return;
+    }
+
     if (activeDraggedElementId && dragStartPoint && dragStartElementPos && yDoc) {
       e.stopPropagation();
-      const canvas = drawingCanvasRef.current;
-      if (!canvas) return;
-      const rect = canvas.getBoundingClientRect();
-      const x = (e.clientX - rect.left) / zoom;
-      const y = (e.clientY - rect.top) / zoom;
-
       const dx = x - dragStartPoint.x;
       const dy = y - dragStartPoint.y;
 
@@ -592,11 +728,6 @@ export const KanbanBoard: React.FC = () => {
 
     if (activeTool === "select" || activeTool === "text") return;
     if (e.buttons !== 1) return;
-    const canvas = drawingCanvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / zoom;
-    const y = (e.clientY - rect.top) / zoom;
     drawMove(x, y);
   };
 
@@ -604,6 +735,9 @@ export const KanbanBoard: React.FC = () => {
     setActiveDraggedElementId(null);
     setDragStartPoint(null);
     setDragStartElementPos(null);
+    setActiveResizingElementId(null);
+    setResizeStartPoint(null);
+    setResizeStartSize(null);
     endDrawing();
   };
 
@@ -639,6 +773,47 @@ export const KanbanBoard: React.FC = () => {
       }
     }
   };
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const file = e.dataTransfer.files?.[0];
+      if (!file || !yDoc) return;
+
+      if (file.type.startsWith("image/")) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const base64String = event.target?.result as string;
+          if (!base64String) return;
+
+          const canvas = drawingCanvasRef.current;
+          if (canvas) {
+            const rect = canvas.getBoundingClientRect();
+            const normalizedX = (e.clientX - rect.left) / zoom;
+            const normalizedY = (e.clientY - rect.top) / zoom;
+
+            const imageId = `el_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+            const yjsElements = yDoc.getMap<CanvasElement>("canvasElements");
+            yjsElements.set(imageId, {
+              id: imageId,
+              type: "image",
+              x: normalizedX,
+              y: normalizedY,
+              width: 300,
+              height: 300,
+              src: base64String,
+              color: brushColor,
+              strokeWidth: brushSize,
+            });
+          }
+        };
+        reader.readAsDataURL(file);
+      }
+    },
+    [yDoc, zoom, brushColor, brushSize]
+  );
 
   // Touch viewport controls refs
   const touchStartDist = useRef<number | null>(null);
@@ -1892,6 +2067,8 @@ export const KanbanBoard: React.FC = () => {
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={handleDrop}
         style={{
           cursor: isPanning ? "grabbing" : spacePressed.current ? "grab" : "default",
           touchAction: "none",
