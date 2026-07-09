@@ -18,6 +18,7 @@ export const WorkspaceListPage: React.FC = () => {
   const { user: currentUser } = useAuth();
   const setActiveWorkspaceId = useWorkspaceStore((state: WorkspaceUiState) => state.setActiveWorkspaceId);
   const triggerWorkspaceListReload = useWorkspaceStore((state: WorkspaceUiState) => state.triggerWorkspaceListReload);
+  const workspaceListVersion = useWorkspaceStore((state: WorkspaceUiState) => state.workspaceListVersion);
 
   const [workspaces, setWorkspaces] = useState<WorkspaceWithPlans[]>([]);
   const [loading, setLoading] = useState(true);
@@ -144,7 +145,7 @@ export const WorkspaceListPage: React.FC = () => {
     return () => {
       active = false;
     };
-  }, [workspaceId, reloadTrigger]);
+  }, [workspaceId, reloadTrigger, workspaceListVersion]);
 
   const getUserRole = (ws: WorkspaceDto): "owner" | "admin" | "member" | null => {
     if (!currentUser) return null;
@@ -267,7 +268,6 @@ export const WorkspaceListPage: React.FC = () => {
       setInviteEmail("");
       setShowInviteModal(false);
       showToast("Invitation sent successfully!", "success");
-      reload();
     } catch (err: any) {
       console.error("Failed to invite member:", err);
       showToast("Failed to invite: " + (err.response?.data?.error?.message || err.message), "error");

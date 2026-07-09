@@ -124,7 +124,7 @@ export class WorkspaceController {
         role,
       );
 
-      res.status(200).json({ success: true, data: updatedWorkspace });
+      res.status(201).json({ success: true, data: updatedWorkspace });
     } catch (error) {
       next(error);
     }
