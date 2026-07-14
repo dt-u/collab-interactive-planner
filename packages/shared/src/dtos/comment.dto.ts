@@ -12,5 +12,11 @@ export const commentDtoSchema = z.object({
   content: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  authorId: z.object({
+    _id: z.string(),
+    name: z.string(),
+    avatarUrl: z.string().optional(),
+  }).optional(),
 });
 export type CommentDto = z.infer<typeof commentDtoSchema>;
+

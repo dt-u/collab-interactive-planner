@@ -20,10 +20,21 @@ export class MediaController {
       }
 
       const planId = (req.query.planId || req.body.planId) as string;
+      
+      let payload = req.body;
+      if (req.file) {
+        payload = {
+          fileName: req.file.originalname,
+          fileUrl: `/api/uploads/${req.file.filename}`,
+          fileSize: req.file.size,
+          mimeType: req.file.mimetype,
+        };
+      }
+
       const media = await this.mediaService.createMedia(
         itemId,
         uploaderId,
-        req.body,
+        payload,
         planId,
       );
 

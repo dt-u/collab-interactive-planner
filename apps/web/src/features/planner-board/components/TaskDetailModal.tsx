@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import * as Y from "yjs";
 import { useParams } from "react-router-dom";
 import { useYjsDocument } from "../../collaborative-editor/hooks/useYjsDocument.js";
@@ -53,8 +53,18 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   // Local state to avoid input lag
   const [localTitle, setLocalTitle] = useState("");
   const [localDesc, setLocalDesc] = useState("");
-  const [localTime, setLocalTime] = useState("");
-  const [localCost, setLocalCost] = useState("");
+  
+  // Time states
+  const [timeHour, setTimeHour] = useState("");
+  const [timeMinute, setTimeMinute] = useState("");
+  const [timePeriod, setTimePeriod] = useState("AM");
+  const [timeError, setTimeError] = useState("");
+
+  // Cost states
+  const [costAmount, setCostAmount] = useState("");
+  const [costCurrency, setCostCurrency] = useState("VND");
+  const [costError, setCostError] = useState("");
+
   const [localImage, setLocalImage] = useState("");
   
   // Comments and Media states
@@ -64,17 +74,57 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   
   const [media, setMedia] = useState<MediaDto[]>([]);
   const [mediaLoading, setMediaLoading] = useState(false);
-  const [mockFileName, setMockFileName] = useState("");
-  const [mockFileUrl, setMockFileUrl] = useState("");
+  
+  // File download and preview states
+  const [activeActionMedia, setActiveActionMedia] = useState<MediaDto | null>(null);
+  const [activePreviewMedia, setActivePreviewMedia] = useState<MediaDto | null>(null);
+
+  const isBackdropMouseDown = useRef(false);
 
   // Update local input values when task updates from Yjs
   useEffect(() => {
     if (task) {
       setLocalTitle(task.title);
       setLocalDesc(task.description);
-      setLocalTime(task.time || "");
-      setLocalCost(task.cost || "");
       setLocalImage(task.image || "");
+
+      // Parse time (format: "hh:mm Period")
+      if (task.time) {
+        const timeParts = task.time.split(" ");
+        if (timeParts.length === 2) {
+          const hm = timeParts[0].split(":");
+          if (hm.length === 2) {
+            setTimeHour(hm[0]);
+            setTimeMinute(hm[1]);
+          }
+          setTimePeriod(timeParts[1]);
+        } else {
+          setTimeHour("");
+          setTimeMinute("");
+          setTimePeriod("AM");
+        }
+      } else {
+        setTimeHour("");
+        setTimeMinute("");
+        setTimePeriod("AM");
+      }
+      setTimeError("");
+
+      // Parse cost (format: "Amount Currency")
+      if (task.cost) {
+        const costParts = task.cost.split(" ");
+        if (costParts.length === 2) {
+          setCostAmount(costParts[0]);
+          setCostCurrency(costParts[1]);
+        } else {
+          setCostAmount(task.cost);
+          setCostCurrency("VND");
+        }
+      } else {
+        setCostAmount("");
+        setCostCurrency("VND");
+      }
+      setCostError("");
     }
   }, [task]);
 
@@ -82,13 +132,19 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     try {
       setCommentsLoading(true);
       const res = await httpClient.get(`/items/${taskId}/comments`, { params: { planId } });
-      setComments(res.data?.data || []);
+      const commentsList = res.data?.data || [];
+      setComments(commentsList);
+      
+      // Update comment count in Yjs if it differs
+      if (task && (task.commentCount || 0) !== commentsList.length) {
+        updateTask({ commentCount: commentsList.length });
+      }
     } catch (err) {
       console.error("Failed to fetch comments:", err);
     } finally {
       setCommentsLoading(false);
     }
-  }, [taskId, planId]);
+  }, [taskId, planId, task, updateTask]);
 
   const fetchMedia = useCallback(async () => {
     try {
@@ -121,15 +177,61 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     }
   };
 
-  const handleTimeBlur = () => {
-    if (task && localTime !== (task.time || "")) {
-      updateTask({ time: localTime });
+  const validateAndSaveTime = (hour: string, minute: string, period: string) => {
+    if (!task) return;
+    
+    const hTrim = hour.trim();
+    const mTrim = minute.trim();
+
+    if (hTrim === "" && mTrim === "") {
+      setTimeError("");
+      updateTask({ time: "" });
+      return;
+    }
+
+    // Validate hour: only digits, 1-12
+    if (hTrim !== "" && (!/^\d+$/.test(hTrim) || Number(hTrim) < 1 || Number(hTrim) > 12)) {
+      setTimeError("Hour must be between 1 and 12.");
+      return;
+    }
+
+    // Validate minute: only digits, 0-59
+    if (mTrim !== "" && (!/^\d+$/.test(mTrim) || Number(mTrim) < 0 || Number(mTrim) > 59)) {
+      setTimeError("Minute must be between 0 and 59.");
+      return;
+    }
+
+    const formattedMinute = mTrim.length === 1 ? `0${mTrim}` : mTrim;
+    const formattedHour = hTrim;
+
+    setTimeError("");
+    const newTime = `${formattedHour}:${formattedMinute} ${period}`;
+    if (newTime !== task.time) {
+      updateTask({ time: newTime });
     }
   };
 
-  const handleCostBlur = () => {
-    if (task && localCost !== (task.cost || "")) {
-      updateTask({ cost: localCost });
+  const validateAndSaveCost = (amount: string, currency: string) => {
+    if (!task) return;
+
+    const aTrim = amount.trim();
+
+    if (aTrim === "") {
+      setCostError("");
+      updateTask({ cost: "" });
+      return;
+    }
+
+    // Validate amount: numeric (optional decimal)
+    if (!/^\d+(\.\d+)?$/.test(aTrim)) {
+      setCostError("Cost must be a valid number.");
+      return;
+    }
+
+    setCostError("");
+    const newCost = `${aTrim} ${currency}`;
+    if (newCost !== task.cost) {
+      updateTask({ cost: newCost });
     }
   };
 
@@ -185,23 +287,14 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     }
   };
 
-  const handleAddMedia = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!mockFileName.trim() || !mockFileUrl.trim()) return;
-
-    try {
-      await httpClient.post(`/items/${taskId}/media`, {
-        fileName: mockFileName,
-        fileUrl: mockFileUrl,
-        fileSize: Math.floor(Math.random() * 5000000) + 10000,
-        mimeType: mockFileName.endsWith(".pdf") ? "application/pdf" : "image/png",
-      }, { params: { planId } });
-      setMockFileName("");
-      setMockFileUrl("");
-      await fetchMedia();
-    } catch (err) {
-      console.error("Failed to add media attachment:", err);
-    }
+  const handleDownload = (m: MediaDto) => {
+    const a = document.createElement("a");
+    a.href = m.fileUrl;
+    a.download = m.fileName;
+    a.target = "_blank";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   const handleDeleteMedia = async (mediaId: string) => {
@@ -220,7 +313,18 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const metadataMap = yDoc ? getSharedColumnMetadata(yDoc) : null;
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div
+      className="modal-backdrop"
+      onMouseDown={(e) => {
+        isBackdropMouseDown.current = e.target === e.currentTarget;
+      }}
+      onMouseUp={(e) => {
+        if (isBackdropMouseDown.current && e.target === e.currentTarget) {
+          onClose();
+        }
+        isBackdropMouseDown.current = false;
+      }}
+    >
       <div
         className="modal-card"
         style={{ maxWidth: 880, width: "95%", maxHeight: "90vh", display: "flex", flexDirection: "column", padding: 24 }}
@@ -279,13 +383,44 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                   <Clock size={12} />
                   <span>Time of Day</span>
                 </label>
-                <input
-                  type="text"
-                  value={localTime}
-                  onChange={(e) => setLocalTime(e.target.value)}
-                  onBlur={handleTimeBlur}
-                  placeholder="e.g. 10:00 AM, 6:00 PM..."
-                />
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    type="text"
+                    style={{ width: "60px", textAlign: "center" }}
+                    placeholder="HH"
+                    maxLength={2}
+                    value={timeHour}
+                    onChange={(e) => setTimeHour(e.target.value)}
+                    onBlur={() => validateAndSaveTime(timeHour, timeMinute, timePeriod)}
+                  />
+                  <span>:</span>
+                  <input
+                    type="text"
+                    style={{ width: "60px", textAlign: "center" }}
+                    placeholder="MM"
+                    maxLength={2}
+                    value={timeMinute}
+                    onChange={(e) => setTimeMinute(e.target.value)}
+                    onBlur={() => validateAndSaveTime(timeHour, timeMinute, timePeriod)}
+                  />
+                  <select
+                    style={{ flex: 1 }}
+                    value={timePeriod}
+                    onChange={(e) => {
+                      const newPeriod = e.target.value;
+                      setTimePeriod(newPeriod);
+                      validateAndSaveTime(timeHour, timeMinute, newPeriod);
+                    }}
+                  >
+                    <option value="AM">AM</option>
+                    <option value="PM">PM</option>
+                  </select>
+                </div>
+                {timeError && (
+                  <span style={{ color: "#f87171", fontSize: 11, marginTop: 4, display: "block" }}>
+                    {timeError}
+                  </span>
+                )}
               </div>
 
               <div className="form-group">
@@ -293,13 +428,35 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                   <DollarSign size={12} />
                   <span>Estimated Cost</span>
                 </label>
-                <input
-                  type="text"
-                  value={localCost}
-                  onChange={(e) => setLocalCost(e.target.value)}
-                  onBlur={handleCostBlur}
-                  placeholder="e.g. 300k VND, Free..."
-                />
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    type="text"
+                    style={{ flex: 2 }}
+                    placeholder="Amount"
+                    value={costAmount}
+                    onChange={(e) => setCostAmount(e.target.value)}
+                    onBlur={() => validateAndSaveCost(costAmount, costCurrency)}
+                  />
+                  <select
+                    style={{ flex: 1 }}
+                    value={costCurrency}
+                    onChange={(e) => {
+                      const newCurrency = e.target.value;
+                      setCostCurrency(newCurrency);
+                      validateAndSaveCost(costAmount, newCurrency);
+                    }}
+                  >
+                    <option value="VND">VND</option>
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                    <option value="GBP">GBP</option>
+                  </select>
+                </div>
+                {costError && (
+                  <span style={{ color: "#f87171", fontSize: 11, marginTop: 4, display: "block" }}>
+                    {costError}
+                  </span>
+                )}
               </div>
             </div>
 
@@ -338,63 +495,151 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               {mediaLoading ? (
                 <div style={{ padding: 12 }}><Spinner size="small" /></div>
               ) : (
-                <div className="media-panel">
+                <div className="media-panel" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   {media.length === 0 ? (
                     <span style={{ fontSize: 13, color: "var(--text-muted)", fontStyle: "italic" }}>
                       No attachments added yet.
                     </span>
                   ) : (
                     media.map((m) => (
-                      <div key={m.id} className="media-item">
-                        <div className="media-item-info">
-                          <Paperclip size={14} style={{ color: "var(--primary)" }} />
-                          <a
-                            href={m.fileUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="media-item-name"
-                          >
-                            {m.fileName}
-                          </a>
-                          <span className="media-item-size">
-                            ({Math.round(m.fileSize / 1024)} KB)
-                          </span>
-                        </div>
-                        <button
-                          className="media-delete-btn"
-                          onClick={() => handleDeleteMedia(m.id)}
-                          title="Delete Attachment"
+                      <div key={m.id} className="media-item" style={{ display: "flex", flexDirection: "column", gap: 8, padding: 12, border: "1px solid var(--border-color)", borderRadius: 8, backgroundColor: "rgba(255,255,255,0.02)" }}>
+                        <div
+                          onClick={() => setActiveActionMedia(m)}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            cursor: "pointer",
+                            padding: "6px 8px",
+                            borderRadius: 4,
+                            transition: "background-color 0.2s",
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.05)"}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
                         >
-                          <Trash2 size={14} />
-                        </button>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, overflow: "hidden" }}>
+                            <Paperclip size={14} style={{ color: "var(--primary)", flexShrink: 0 }} />
+                            <span className="media-item-name" style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {m.fileName}
+                            </span>
+                            <span className="media-item-size" style={{ opacity: 0.7, fontSize: 11, flexShrink: 0 }}>
+                              ({Math.round(m.fileSize / 1024)} KB)
+                            </span>
+                          </div>
+                          <span style={{ fontSize: 11, color: "var(--primary)", fontWeight: 500, flexShrink: 0 }}>Options</span>
+                        </div>
+                        
+                        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 8 }}>
+                          {/* Replace File */}
+                          <input
+                            type="file"
+                            id={`replace-input-${m.id}`}
+                            style={{ display: "none" }}
+                            onChange={async (e) => {
+                              const selectedFile = e.target.files?.[0];
+                              if (!selectedFile) return;
+
+                              const formData = new FormData();
+                              formData.append("file", selectedFile);
+                              
+                              try {
+                                setMediaLoading(true);
+                                await httpClient.delete(`/media/${m.id}`, { params: { planId } });
+                                await httpClient.post(`/items/${taskId}/media`, formData, {
+                                  params: { planId },
+                                  headers: { "Content-Type": "multipart/form-data" },
+                                });
+                                await fetchMedia();
+                              } catch (err) {
+                                console.error("Failed to replace attachment:", err);
+                              } finally {
+                                setMediaLoading(false);
+                              }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => document.getElementById(`replace-input-${m.id}`)?.click()}
+                            style={{
+                              background: "rgba(255,255,255,0.05)",
+                              border: "1px solid var(--border-color)",
+                              padding: "4px 8px",
+                              borderRadius: 4,
+                              fontSize: 11,
+                              cursor: "pointer",
+                              color: "var(--text-color)",
+                            }}
+                          >
+                            Change File
+                          </button>
+                          
+                          <button
+                            type="button"
+                            className="media-delete-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteMedia(m.id);
+                            }}
+                            title="Delete Attachment"
+                            style={{
+                              background: "rgba(239, 68, 68, 0.1)",
+                              border: "none",
+                              padding: "4px 8px",
+                              borderRadius: 4,
+                              cursor: "pointer",
+                              color: "#ef4444",
+                              display: "flex",
+                              alignItems: "center",
+                              fontSize: 11,
+                            }}
+                          >
+                            <Trash2 size={12} style={{ marginRight: 4 }} />
+                            Delete
+                          </button>
+                        </div>
                       </div>
                     ))
                   )}
                 </div>
               )}
 
-              {/* Add Mock Media Form */}
-              <form onSubmit={handleAddMedia} className="media-uploader" style={{ marginTop: 16 }}>
-                <div className="media-upload-fields">
-                  <input
-                    type="text"
-                    placeholder="File Name (e.g. map.png)"
-                    value={mockFileName}
-                    onChange={(e) => setMockFileName(e.target.value)}
-                    required
-                  />
-                  <input
-                    type="text"
-                    placeholder="File URL"
-                    value={mockFileUrl}
-                    onChange={(e) => setMockFileUrl(e.target.value)}
-                    required
-                  />
-                </div>
-                <button type="submit" className="media-upload-btn">
-                  Attach Simulated File
+              {/* Direct File Upload button */}
+              <div style={{ marginTop: 16 }}>
+                <input
+                  type="file"
+                  id="task-file-upload-input"
+                  style={{ display: "none" }}
+                  onChange={async (e) => {
+                    const selectedFile = e.target.files?.[0];
+                    if (!selectedFile) return;
+
+                    const formData = new FormData();
+                    formData.append("file", selectedFile);
+                    
+                    try {
+                      setMediaLoading(true);
+                      await httpClient.post(`/items/${taskId}/media`, formData, {
+                        params: { planId },
+                        headers: { "Content-Type": "multipart/form-data" },
+                      });
+                      await fetchMedia();
+                    } catch (err) {
+                      console.error("Failed to upload file attachment:", err);
+                    } finally {
+                      setMediaLoading(false);
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="media-upload-btn"
+                  onClick={() => document.getElementById("task-file-upload-input")?.click()}
+                  style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "center", width: "100%", padding: "10px 16px" }}
+                >
+                  <Paperclip size={14} />
+                  Upload File
                 </button>
-              </form>
+              </div>
             </div>
           </div>
 
@@ -469,6 +714,177 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Action Menu Modal Overlay */}
+      {activeActionMedia && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0, 0, 0, 0.6)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 999,
+          }}
+          onClick={() => setActiveActionMedia(null)}
+        >
+          <div
+            style={{
+              backgroundColor: "#1e293b",
+              border: "1px solid #334155",
+              borderRadius: 8,
+              width: 320,
+              padding: 20,
+              display: "flex",
+              flexDirection: "column",
+              gap: 12,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h4 style={{ margin: 0, fontSize: 14, color: "#fff", textAlign: "center", borderBottom: "1px solid #334155", paddingBottom: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {activeActionMedia.fileName}
+            </h4>
+            <button
+              onClick={() => {
+                setActivePreviewMedia(activeActionMedia);
+                setActiveActionMedia(null);
+              }}
+              style={{
+                backgroundColor: "rgba(255, 255, 255, 0.05)",
+                color: "#fff",
+                border: "1px solid #334155",
+                padding: "10px 12px",
+                borderRadius: 4,
+                cursor: "pointer",
+                fontWeight: 500,
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.1)"}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.05)"}
+            >
+              Preview File
+            </button>
+            <button
+              onClick={() => {
+                handleDownload(activeActionMedia);
+                setActiveActionMedia(null);
+              }}
+              style={{
+                backgroundColor: "var(--primary, #0ea5e9)",
+                color: "#fff",
+                border: "none",
+                padding: "10px 12px",
+                borderRadius: 4,
+                cursor: "pointer",
+                fontWeight: 600,
+              }}
+            >
+              Download File
+            </button>
+            <button
+              onClick={() => setActiveActionMedia(null)}
+              style={{
+                backgroundColor: "transparent",
+                color: "#94a3b8",
+                border: "none",
+                cursor: "pointer",
+                fontSize: 12,
+                marginTop: 4,
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Preview Modal Overlay */}
+      {activePreviewMedia && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0, 0, 0, 0.8)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: 24,
+          }}
+          onClick={() => setActivePreviewMedia(null)}
+        >
+          <div
+            style={{
+              backgroundColor: "#1e293b",
+              border: "1px solid #334155",
+              borderRadius: 8,
+              maxWidth: "90%",
+              maxHeight: "90%",
+              width: 700,
+              height: 550,
+              display: "flex",
+              flexDirection: "column",
+              padding: 24,
+              position: "relative",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #334155", paddingBottom: 12, marginBottom: 16, flexShrink: 0 }}>
+              <h3 style={{ margin: 0, fontSize: 16, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "80%" }}>
+                Preview: {activePreviewMedia.fileName}
+              </h3>
+              <button
+                onClick={() => setActivePreviewMedia(null)}
+                style={{ background: "transparent", border: "none", color: "#94a3b8", cursor: "pointer" }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            
+            <div style={{ flex: 1, display: "flex", justifyContent: "center", alignItems: "center", overflow: "hidden" }}>
+              {activePreviewMedia.mimeType.startsWith("image/") ? (
+                <img
+                  src={activePreviewMedia.fileUrl}
+                  alt={activePreviewMedia.fileName}
+                  style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
+                />
+              ) : activePreviewMedia.mimeType === "application/pdf" ? (
+                <iframe
+                  src={activePreviewMedia.fileUrl}
+                  title={activePreviewMedia.fileName}
+                  style={{ width: "100%", height: "100%", border: "none", backgroundColor: "#fff" }}
+                />
+              ) : (
+                <div style={{ textAlign: "center", color: "#94a3b8" }}>
+                  <p>Preview not available for this file type</p>
+                  <button
+                    onClick={() => handleDownload(activePreviewMedia)}
+                    style={{
+                      backgroundColor: "var(--primary, #0ea5e9)",
+                      color: "#fff",
+                      border: "none",
+                      padding: "10px 20px",
+                      borderRadius: 4,
+                      cursor: "pointer",
+                      fontWeight: 600,
+                      marginTop: 12,
+                    }}
+                  >
+                    Download File
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -3,7 +3,7 @@ import { CommentModel, IComment } from "./comment.model.js";
 
 export class CommentRepository {
   async findById(id: string): Promise<IComment | null> {
-    return CommentModel.findById(id).exec();
+    return CommentModel.findById(id).populate("userId").exec();
   }
 
   async findByItem(itemId: string): Promise<IComment[]> {

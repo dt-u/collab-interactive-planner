@@ -34,6 +34,15 @@ export const BoardTaskCard: React.FC<BoardTaskCardProps> = ({
   const { planId } = useParams<{ planId: string }>();
   const { task } = useYjsDocument(yDoc, taskId);
   const [fallbackImage, setFallbackImage] = useState<string | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!task) return;
+    const totalCount = task.commentCount || 0;
+    const readCount = Number(localStorage.getItem(`read_comments_${taskId}`) || 0);
+    const unread = Math.max(0, totalCount - readCount);
+    setUnreadCount(unread);
+  }, [task, task?.commentCount, taskId]);
 
   // Fetch attachments to use as cover fallback if task.image is empty
   useEffect(() => {
@@ -95,7 +104,13 @@ export const BoardTaskCard: React.FC<BoardTaskCardProps> = ({
       {...(isOverlay ? {} : attributes)}
       {...(isOverlay ? {} : listeners)}
       className={`whiteboard-task-card ${isFocusedByRemote ? "card-focused-remote" : ""}`}
-      onClick={onClick}
+      onClick={() => {
+        if (task) {
+          localStorage.setItem(`read_comments_${taskId}`, String(task.commentCount || 0));
+          setUnreadCount(0);
+        }
+        onClick();
+      }}
     >
       {/* Top row: Time badge & Remote peer presence */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -187,6 +202,27 @@ export const BoardTaskCard: React.FC<BoardTaskCardProps> = ({
           <div style={{ display: "flex", alignItems: "center", gap: 4, color: "#94a3b8", fontSize: 11, fontWeight: 500 }}>
             <MessageSquare size={13} />
             <span>Details</span>
+            {unreadCount > 0 && (
+              <span
+                style={{
+                  backgroundColor: "#ef4444",
+                  color: "#ffffff",
+                  fontSize: 9,
+                  fontWeight: 700,
+                  borderRadius: "50%",
+                  minWidth: 16,
+                  height: 16,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "0 4px",
+                  marginLeft: 4,
+                  boxShadow: "0 1px 2px rgba(0,0,0,0.1)",
+                }}
+              >
+                {unreadCount}
+              </span>
+            )}
           </div>
           {onDelete && (
             <button
