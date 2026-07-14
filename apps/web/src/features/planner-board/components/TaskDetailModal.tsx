@@ -460,8 +460,8 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       }}
     >
       <div
-        className="modal-card"
-        style={{ maxWidth: 880, width: "95%", maxHeight: "90vh", display: "flex", flexDirection: "column", padding: 24 }}
+        className="modal-card w-full max-w-4xl md:max-w-5xl overflow-hidden flex flex-col"
+        style={{ width: "95%", maxHeight: "90vh", padding: 24 }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
@@ -496,9 +496,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
         </div>
 
         {/* Modal Content Grid */}
-        <div className="task-detail-grid" style={{ overflowY: "auto", flex: 1, paddingRight: 4 }}>
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 overflow-y-auto overflow-x-hidden pr-1" style={{ flex: 1 }}>
           {/* Main Column */}
-          <div className="detail-main-col">
+          <div className="col-span-1 md:col-span-7 lg:col-span-8 flex flex-col gap-5">
             <div className="form-group">
               <label>Itinerary Activity Title</label>
               <input
@@ -569,7 +569,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                   <input
                     id="task-cost-amount-input"
                     type="text"
-                    style={{ flex: 2 }}
+                    style={{ flex: 1 }}
                     placeholder="Amount"
                     value={costAmount}
                     onChange={(e) => setCostAmount(e.target.value)}
@@ -578,7 +578,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                   <input
                     id="task-cost-currency-input"
                     type="text"
-                    style={{ flex: 1 }}
+                    style={{ width: "80px", flexShrink: 0 }}
                     placeholder="Unit (e.g. USD)"
                     value={costCurrency}
                     onChange={(e) => setCostCurrency(e.target.value)}
@@ -634,37 +634,16 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                     <button
                       type="button"
                       onClick={() => coverFileInputRef.current?.click()}
-                      style={{
-                        background: "var(--primary, #0ea5e9)",
-                        color: "#fff",
-                        border: "none",
-                        padding: "8px 12px",
-                        borderRadius: 4,
-                        cursor: "pointer",
-                        fontWeight: 600,
-                        fontSize: 12,
-                      }}
+                      className="px-3.5 py-1.5 rounded-md text-xs font-semibold bg-[var(--primary,#0ea5e9)] hover:bg-[var(--primary,#0ea5e9)]/80 text-white shadow-md transition-all duration-200 cursor-pointer"
                     >
                       Change Image
                     </button>
                     <button
                       type="button"
                       onClick={() => updateTask({ coverImage: "" })}
-                      style={{
-                        background: "#ef4444",
-                        color: "#fff",
-                        border: "none",
-                        padding: "8px 12px",
-                        borderRadius: 4,
-                        cursor: "pointer",
-                        fontWeight: 600,
-                        fontSize: 12,
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 4,
-                      }}
+                      className="px-3.5 py-1.5 rounded-md text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white shadow-md transition-all duration-200 cursor-pointer flex items-center gap-1.5"
                     >
-                      <Trash2 size={14} />
+                      <Trash2 size={13} />
                       Remove
                     </button>
                   </div>
@@ -825,18 +804,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
                           {activeActionMediaId === m.id && (
                             <div
-                              className="absolute top-full left-0 z-50 mt-1"
-                              style={{
-                                backgroundColor: "#1e293b",
-                                border: "1px solid #334155",
-                                borderRadius: 6,
-                                boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.3)",
-                                display: "flex",
-                                flexDirection: "column",
-                                padding: 6,
-                                gap: 4,
-                                minWidth: 140,
-                              }}
+                              className="absolute top-full left-0 z-50 mt-1.5 w-36 bg-[#0f172a]/95 backdrop-blur-md border border-slate-800 rounded-lg shadow-2xl p-1 flex flex-col gap-0.5 animate-in fade-in slide-in-from-top-1 duration-150"
                             >
                               <button
                                 type="button"
@@ -845,18 +813,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                                   setActivePreviewMedia(m);
                                   setActiveActionMediaId(null);
                                 }}
-                                style={{
-                                  background: "transparent",
-                                  border: "none",
-                                  color: "#fff",
-                                  padding: "6px 8px",
-                                  textAlign: "left",
-                                  cursor: "pointer",
-                                  borderRadius: 4,
-                                  fontSize: 12,
-                                }}
-                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.05)"}
-                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                                className="w-full text-left px-2.5 py-1.5 text-xs text-slate-300 hover:text-white hover:bg-white/5 rounded-md transition-all duration-150 cursor-pointer"
                               >
                                 Preview
                               </button>
@@ -867,25 +824,14 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                                   handleDownload(m);
                                   setActiveActionMediaId(null);
                                 }}
-                                style={{
-                                  background: "transparent",
-                                  border: "none",
-                                  color: "#fff",
-                                  padding: "6px 8px",
-                                  textAlign: "left",
-                                  cursor: "pointer",
-                                  borderRadius: 4,
-                                  fontSize: 12,
-                                }}
-                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.05)"}
-                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                                className="w-full text-left px-2.5 py-1.5 text-xs text-slate-300 hover:text-white hover:bg-white/5 rounded-md transition-all duration-150 cursor-pointer"
                               >
                                 Download
                               </button>
                             </div>
                           )}
                           
-                          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 8 }}>
+                          <div className="flex gap-2 justify-end border-t border-white/5 pt-2 mt-1">
                             {/* Replace File */}
                             <input
                               type="file"
@@ -916,40 +862,21 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                             <button
                               type="button"
                               onClick={() => document.getElementById(`replace-input-${m.id}`)?.click()}
-                              style={{
-                                background: "rgba(255,255,255,0.05)",
-                                border: "1px solid var(--border-color)",
-                                padding: "4px 8px",
-                                borderRadius: 4,
-                                fontSize: 11,
-                                cursor: "pointer",
-                                color: "var(--text-color)",
-                              }}
+                              className="px-2.5 py-1 text-[11px] font-medium rounded-md border border-[var(--border-color)] bg-white/5 text-[var(--text-color)] hover:bg-white/10 hover:text-white transition-all duration-200 cursor-pointer"
                             >
                               Change File
                             </button>
                             
                             <button
                               type="button"
-                              className="media-delete-btn"
+                              className="px-2.5 py-1 text-[11px] font-medium rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 transition-all duration-200 cursor-pointer flex items-center gap-1"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleDeleteMedia(m.id);
                               }}
                               title="Delete Attachment"
-                              style={{
-                                background: "rgba(239, 68, 68, 0.1)",
-                                border: "none",
-                                padding: "4px 8px",
-                                borderRadius: 4,
-                                cursor: "pointer",
-                                color: "#ef4444",
-                                display: "flex",
-                                alignItems: "center",
-                                fontSize: 11,
-                              }}
                             >
-                              <Trash2 size={12} style={{ marginRight: 4 }} />
+                              <Trash2 size={11} />
                               Delete
                             </button>
                           </div>
@@ -1005,7 +932,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
           </div>
 
           {/* Sidebar Column */}
-          <div className="detail-side-col">
+          <div className="col-span-1 md:col-span-5 lg:col-span-4 border-t md:border-t-0 md:border-l pt-6 md:pt-0 pl-0 md:pl-6 flex flex-col gap-6" style={{ borderLeftColor: "var(--border-color)", borderTopColor: "var(--border-color)" }}>
             <div className="form-group">
               <label>Day / Timeline Milestone</label>
               <select value={task.status} onChange={handleStatusChange}>
