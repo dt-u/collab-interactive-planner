@@ -496,9 +496,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
         </div>
 
         {/* Modal Content Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 overflow-y-auto overflow-x-hidden pr-1" style={{ flex: 1 }}>
+        <div className="flex flex-col md:flex-row gap-6 w-full overflow-hidden" style={{ flex: 1 }}>
           {/* Main Column */}
-          <div className="col-span-1 md:col-span-7 lg:col-span-8 flex flex-col gap-5">
+          <div className="w-full md:w-[60%] lg:w-[65%] overflow-y-auto pr-2 flex flex-col gap-5">
             <div className="form-group">
               <label>Itinerary Activity Title</label>
               <input
@@ -932,7 +932,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
           </div>
 
           {/* Sidebar Column */}
-          <div className="col-span-1 md:col-span-5 lg:col-span-4 border-t md:border-t-0 md:border-l pt-6 md:pt-0 pl-0 md:pl-6 flex flex-col gap-6" style={{ borderLeftColor: "var(--border-color)", borderTopColor: "var(--border-color)" }}>
+          <div className="w-full md:w-[40%] lg:w-[35%] border-t md:border-t-0 md:border-l pt-6 md:pt-0 pl-0 md:pl-6 flex flex-col h-full overflow-hidden" style={{ borderLeftColor: "var(--border-color)", borderTopColor: "var(--border-color)" }}>
             <div className="form-group">
               <label>Day / Timeline Milestone</label>
               <select value={task.status} onChange={handleStatusChange}>
@@ -957,7 +957,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               {commentsLoading ? (
                 <div style={{ padding: 12 }}><Spinner size="small" /></div>
               ) : (
-                <div className="comments-panel" style={{ flex: 1 }}>
+                <div className="flex-1 overflow-y-auto pr-1 flex flex-col gap-4" style={{ minHeight: 0 }}>
                   {comments.length === 0 ? (
                     <span style={{ fontSize: 13, color: "var(--text-muted)", fontStyle: "italic" }}>
                       No comments yet. Write the first one!
