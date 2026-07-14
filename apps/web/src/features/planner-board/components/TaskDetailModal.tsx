@@ -63,10 +63,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   // Cost states
   const [costAmount, setCostAmount] = useState("");
   const [costCurrency, setCostCurrency] = useState("VND");
-  const [customCurrency, setCustomCurrency] = useState("");
   const [costError, setCostError] = useState("");
-
-  const [localImage, setLocalImage] = useState("");
   
   // Comments and Media states
   const [comments, setComments] = useState<CommentDto[]>([]);
@@ -84,6 +81,10 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const [isDragOver, setIsDragOver] = useState(false);
   const coverFileInputRef = useRef<HTMLInputElement>(null);
 
+  // Attachments Drag & Drop states
+  const [isAttachmentDragOver, setIsAttachmentDragOver] = useState(false);
+  const attachmentFileInputRef = useRef<HTMLInputElement>(null);
+
   const isBackdropMouseDown = useRef(false);
 
   // Update local input values when task updates from Yjs
@@ -95,7 +96,6 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       if (document.activeElement !== document.getElementById("task-desc-input")) {
         setLocalDesc(task.description);
       }
-      setLocalImage(task.image || "");
 
       // Parse time (format: "hh:mm Period")
       if (task.time) {
@@ -138,27 +138,24 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
           if (document.activeElement !== document.getElementById("task-cost-amount-input")) {
             setCostAmount(costParts[0]);
           }
-          const isStandard = ["VND", "USD", "EUR", "GBP", "JPY", "CNY", "KRW"].includes(costParts[1]);
-          if (isStandard) {
+          if (document.activeElement !== document.getElementById("task-cost-currency-input")) {
             setCostCurrency(costParts[1]);
-            setCustomCurrency("");
-          } else {
-            setCostCurrency("Other");
-            setCustomCurrency(costParts[1]);
           }
         } else {
           if (document.activeElement !== document.getElementById("task-cost-amount-input")) {
             setCostAmount(task.cost);
           }
-          setCostCurrency("VND");
-          setCustomCurrency("");
+          if (document.activeElement !== document.getElementById("task-cost-currency-input")) {
+            setCostCurrency("");
+          }
         }
       } else {
         if (document.activeElement !== document.getElementById("task-cost-amount-input")) {
           setCostAmount("");
         }
-        setCostCurrency("VND");
-        setCustomCurrency("");
+        if (document.activeElement !== document.getElementById("task-cost-currency-input")) {
+          setCostCurrency("");
+        }
       }
       setCostError("");
     }
@@ -168,13 +165,24 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     try {
       setCommentsLoading(true);
       const res = await httpClient.get(`/items/${taskId}/comments`, { params: { planId } });
-      setComments(res.data?.data || []);
+      const commentsList = res.data?.data || [];
+      setComments(commentsList);
+      const metadataStr = JSON.stringify(commentsList.map((c: any) => ({
+        id: c.id,
+        authorId: c.authorId?._id || c.authorId
+      })));
+      if (task && (task.commentCount !== commentsList.length || task.commentMetadata !== metadataStr)) {
+        updateTask({
+          commentCount: commentsList.length,
+          commentMetadata: metadataStr
+        });
+      }
     } catch (err) {
       console.error("Failed to fetch comments:", err);
     } finally {
       setCommentsLoading(false);
     }
-  }, [taskId, planId]);
+  }, [taskId, planId, task, updateTask]);
 
   const fetchMedia = useCallback(async () => {
     try {
@@ -205,8 +213,15 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
           const commentsList = res.data?.data || [];
           setComments(commentsList);
           hasLoadedComments.current = true;
-          if (task && (task.commentCount || 0) !== commentsList.length) {
-            updateTask({ commentCount: commentsList.length });
+          const metadataStr = JSON.stringify(commentsList.map((c: any) => ({
+            id: c.id,
+            authorId: c.authorId?._id || c.authorId
+          })));
+          if (task && (task.commentCount !== commentsList.length || task.commentMetadata !== metadataStr)) {
+            updateTask({
+              commentCount: commentsList.length,
+              commentMetadata: metadataStr
+            });
           }
         } catch (err) {
           console.error("Failed to load initial comments:", err);
@@ -266,41 +281,33 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     }
   };
 
-  const validateAndSaveCost = (amount: string, currency: string, customCurr?: string) => {
+  const validateAndSaveCost = (amount: string, currency: string) => {
     if (!task) return;
 
     const aTrim = amount.trim();
+    const cTrim = currency.trim();
 
-    if (aTrim === "") {
+    if (aTrim === "" && cTrim === "") {
       setCostError("");
       updateTask({ cost: "" });
       return;
     }
 
-    // Validate amount: numeric (optional decimal)
-    if (!/^\d+(\.\d+)?$/.test(aTrim)) {
+    if (aTrim !== "" && !/^\d+(\.\d+)?$/.test(aTrim)) {
       setCostError("Cost must be a valid number.");
       return;
     }
 
-    const finalCurrency = currency === "Other" ? (customCurr || "").trim() : currency;
-    
-    if (currency === "Other" && finalCurrency === "") {
-      setCostError("Please specify custom currency.");
-      return;
-    }
-
     setCostError("");
-    const newCost = `${aTrim} ${finalCurrency}`;
+    const newCost = `${aTrim} ${cTrim}`.trim();
     if (newCost !== task.cost) {
       updateTask({ cost: newCost });
     }
   };
 
-  const handleImageBlur = () => {
-    if (task && localImage !== (task.image || "")) {
-      updateTask({ image: localImage });
-    }
+  const getInitials = (name: string) => {
+    if (!name) return "?";
+    return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
   };
 
   const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -338,7 +345,14 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       const res = await httpClient.get(`/items/${taskId}/comments`, { params: { planId } });
       const commentsList = res.data?.data || [];
       setComments(commentsList);
-      updateTask({ commentCount: commentsList.length });
+      const metadataStr = JSON.stringify(commentsList.map((c: any) => ({
+        id: c.id,
+        authorId: c.authorId?._id || c.authorId
+      })));
+      updateTask({
+        commentCount: commentsList.length,
+        commentMetadata: metadataStr
+      });
     } catch (err) {
       console.error("Failed to add comment:", err);
     }
@@ -351,7 +365,14 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       const res = await httpClient.get(`/items/${taskId}/comments`, { params: { planId } });
       const commentsList = res.data?.data || [];
       setComments(commentsList);
-      updateTask({ commentCount: commentsList.length });
+      const metadataStr = JSON.stringify(commentsList.map((c: any) => ({
+        id: c.id,
+        authorId: c.authorId?._id || c.authorId
+      })));
+      updateTask({
+        commentCount: commentsList.length,
+        commentMetadata: metadataStr
+      });
     } catch (err) {
       console.error("Failed to delete comment:", err);
     }
@@ -384,16 +405,36 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     try {
       setMediaLoading(true);
       const res = await httpClient.post(`/items/${taskId}/media`, formData, {
-        params: { planId },
+        params: { planId, isCover: true },
         headers: { "Content-Type": "multipart/form-data" },
       });
       const fileUrl = res.data?.data?.fileUrl;
       if (fileUrl) {
-        updateTask({ image: fileUrl });
+        updateTask({ coverImage: fileUrl });
       }
       await fetchMedia();
     } catch (err) {
       console.error("Failed to upload cover image:", err);
+    } finally {
+      setMediaLoading(false);
+    }
+  };
+
+  const handleAttachmentsUpload = async (fileList: FileList) => {
+    if (fileList.length === 0) return;
+    setMediaLoading(true);
+    try {
+      for (let i = 0; i < fileList.length; i++) {
+        const formData = new FormData();
+        formData.append("file", fileList[i]);
+        await httpClient.post(`/items/${taskId}/media`, formData, {
+          params: { planId },
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+      }
+      await fetchMedia();
+    } catch (err) {
+      console.error("Failed to upload file attachments:", err);
     } finally {
       setMediaLoading(false);
     }
@@ -532,37 +573,17 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                     placeholder="Amount"
                     value={costAmount}
                     onChange={(e) => setCostAmount(e.target.value)}
-                    onBlur={() => validateAndSaveCost(costAmount, costCurrency, customCurrency)}
+                    onBlur={() => validateAndSaveCost(costAmount, costCurrency)}
                   />
-                  <select
+                  <input
+                    id="task-cost-currency-input"
+                    type="text"
                     style={{ flex: 1 }}
+                    placeholder="Unit (e.g. USD)"
                     value={costCurrency}
-                    onChange={(e) => {
-                      const newCurrency = e.target.value;
-                      setCostCurrency(newCurrency);
-                      validateAndSaveCost(costAmount, newCurrency, customCurrency);
-                    }}
-                  >
-                    <option value="VND">VND</option>
-                    <option value="USD">USD</option>
-                    <option value="EUR">EUR</option>
-                    <option value="GBP">GBP</option>
-                    <option value="JPY">JPY</option>
-                    <option value="CNY">CNY</option>
-                    <option value="KRW">KRW</option>
-                    <option value="Other">Other</option>
-                  </select>
-                  {costCurrency === "Other" && (
-                    <input
-                      id="task-custom-currency-input"
-                      type="text"
-                      style={{ width: "80px" }}
-                      placeholder="Currency"
-                      value={customCurrency}
-                      onChange={(e) => setCustomCurrency(e.target.value)}
-                      onBlur={() => validateAndSaveCost(costAmount, costCurrency, customCurrency)}
-                    />
-                  )}
+                    onChange={(e) => setCostCurrency(e.target.value)}
+                    onBlur={() => validateAndSaveCost(costAmount, costCurrency)}
+                  />
                 </div>
                 {costError && (
                   <span style={{ color: "#f87171", fontSize: 11, marginTop: 4, display: "block" }}>
@@ -574,7 +595,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
             <div className="form-group">
               <label>Card Cover Image</label>
-              {task.image ? (
+              {task.coverImage ? (
                 <div
                   className="cover-image-container"
                   style={{
@@ -587,7 +608,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                   }}
                 >
                   <img
-                    src={task.image}
+                    src={task.coverImage}
                     alt="Card Cover"
                     style={{ width: "100%", height: "100%", objectFit: "cover" }}
                   />
@@ -628,7 +649,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                     </button>
                     <button
                       type="button"
-                      onClick={() => updateTask({ image: "" })}
+                      onClick={() => updateTask({ coverImage: "" })}
                       style={{
                         background: "#ef4444",
                         color: "#fff",
@@ -727,216 +748,259 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               ) : (
                 <div className="media-panel" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   {media.length === 0 ? (
-                    <span style={{ fontSize: 13, color: "var(--text-muted)", fontStyle: "italic" }}>
-                      No attachments added yet.
-                    </span>
-                  ) : (
-                    media.map((m) => (
-                      <div key={m.id} className="media-item" style={{ display: "flex", flexDirection: "column", gap: 8, padding: 12, border: "1px solid var(--border-color)", borderRadius: 8, backgroundColor: "rgba(255,255,255,0.02)", position: "relative" }}>
-                        <div
-                          onClick={() => setActiveActionMediaId(activeActionMediaId === m.id ? null : m.id)}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            cursor: "pointer",
-                            padding: "6px 8px",
-                            borderRadius: 4,
-                            transition: "background-color 0.2s",
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      <span style={{ fontSize: 13, color: "var(--text-muted)", fontStyle: "italic" }}>
+                        No attachments added yet.
+                      </span>
+                      <div
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          setIsAttachmentDragOver(true);
+                        }}
+                        onDragLeave={() => setIsAttachmentDragOver(false)}
+                        onDrop={async (e) => {
+                          e.preventDefault();
+                          setIsAttachmentDragOver(false);
+                          if (e.dataTransfer.files) {
+                            await handleAttachmentsUpload(e.dataTransfer.files);
+                          }
+                        }}
+                        onClick={() => attachmentFileInputRef.current?.click()}
+                        style={{
+                          border: isAttachmentDragOver ? "2px dashed var(--primary, #0ea5e9)" : "2px dashed var(--border-color, #334155)",
+                          borderRadius: 8,
+                          height: 120,
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          cursor: "pointer",
+                          backgroundColor: isAttachmentDragOver ? "rgba(14, 165, 233, 0.05)" : "rgba(255,255,255,0.01)",
+                          transition: "border-color 0.2s, background-color 0.2s",
+                          color: "var(--text-muted)",
+                          gap: 8,
+                        }}
+                      >
+                        <span style={{ fontSize: 24, fontWeight: 300 }}>+</span>
+                        <span style={{ fontSize: 13 }}>Click to upload or drag & drop files</span>
+                        <input
+                          type="file"
+                          ref={attachmentFileInputRef}
+                          style={{ display: "none" }}
+                          multiple
+                          onChange={(e) => {
+                            if (e.target.files) handleAttachmentsUpload(e.target.files);
                           }}
-                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.05)"}
-                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-                        >
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, overflow: "hidden" }}>
-                            <Paperclip size={14} style={{ color: "var(--primary)", flexShrink: 0 }} />
-                            <span className="media-item-name" style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {m.fileName}
-                            </span>
-                            <span className="media-item-size" style={{ opacity: 0.7, fontSize: 11, flexShrink: 0 }}>
-                              ({Math.round(m.fileSize / 1024)} KB)
-                            </span>
-                          </div>
-                        </div>
-
-                        {activeActionMediaId === m.id && (
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {media.map((m) => (
+                        <div key={m.id} className="media-item" style={{ display: "flex", flexDirection: "column", gap: 8, padding: 12, border: "1px solid var(--border-color)", borderRadius: 8, backgroundColor: "rgba(255,255,255,0.02)", position: "relative" }}>
                           <div
+                            onClick={() => setActiveActionMediaId(activeActionMediaId === m.id ? null : m.id)}
                             style={{
-                              position: "absolute",
-                              top: "100%",
-                              left: 12,
-                              backgroundColor: "#1e293b",
-                              border: "1px solid #334155",
-                              borderRadius: 6,
-                              boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.3)",
-                              zIndex: 100,
-                              display: "flex",
-                              flexDirection: "column",
-                              padding: 6,
-                              gap: 4,
-                              marginTop: -4,
-                              minWidth: 140,
-                            }}
-                          >
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActivePreviewMedia(m);
-                                setActiveActionMediaId(null);
-                              }}
-                              style={{
-                                background: "transparent",
-                                border: "none",
-                                color: "#fff",
-                                padding: "6px 8px",
-                                textAlign: "left",
-                                cursor: "pointer",
-                                borderRadius: 4,
-                                fontSize: 12,
-                              }}
-                              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.05)"}
-                              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-                            >
-                              Preview
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDownload(m);
-                                setActiveActionMediaId(null);
-                              }}
-                              style={{
-                                background: "transparent",
-                                border: "none",
-                                color: "#fff",
-                                padding: "6px 8px",
-                                textAlign: "left",
-                                cursor: "pointer",
-                                borderRadius: 4,
-                                fontSize: 12,
-                              }}
-                              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.05)"}
-                              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-                            >
-                              Download
-                            </button>
-                          </div>
-                        )}
-                        
-                        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 8 }}>
-                          {/* Replace File */}
-                          <input
-                            type="file"
-                            id={`replace-input-${m.id}`}
-                            style={{ display: "none" }}
-                            onChange={async (e) => {
-                              const selectedFile = e.target.files?.[0];
-                              if (!selectedFile) return;
-
-                              const formData = new FormData();
-                              formData.append("file", selectedFile);
-                              
-                              try {
-                                setMediaLoading(true);
-                                await httpClient.delete(`/media/${m.id}`, { params: { planId } });
-                                await httpClient.post(`/items/${taskId}/media`, formData, {
-                                  params: { planId },
-                                  headers: { "Content-Type": "multipart/form-data" },
-                                });
-                                await fetchMedia();
-                              } catch (err) {
-                                console.error("Failed to replace attachment:", err);
-                              } finally {
-                                setMediaLoading(false);
-                              }
-                            }}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => document.getElementById(`replace-input-${m.id}`)?.click()}
-                            style={{
-                              background: "rgba(255,255,255,0.05)",
-                              border: "1px solid var(--border-color)",
-                              padding: "4px 8px",
-                              borderRadius: 4,
-                              fontSize: 11,
-                              cursor: "pointer",
-                              color: "var(--text-color)",
-                            }}
-                          >
-                            Change File
-                          </button>
-                          
-                          <button
-                            type="button"
-                            className="media-delete-btn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteMedia(m.id);
-                            }}
-                            title="Delete Attachment"
-                            style={{
-                              background: "rgba(239, 68, 68, 0.1)",
-                              border: "none",
-                              padding: "4px 8px",
-                              borderRadius: 4,
-                              cursor: "pointer",
-                              color: "#ef4444",
                               display: "flex",
                               alignItems: "center",
-                              fontSize: 11,
+                              justifyContent: "space-between",
+                              cursor: "pointer",
+                              padding: "6px 8px",
+                              borderRadius: 4,
+                              transition: "background-color 0.2s",
                             }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.05)"}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
                           >
-                            <Trash2 size={12} style={{ marginRight: 4 }} />
-                            Delete
-                          </button>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, overflow: "hidden" }}>
+                              <Paperclip size={14} style={{ color: "var(--primary)", flexShrink: 0 }} />
+                              <span className="media-item-name" style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {m.fileName}
+                              </span>
+                              <span className="media-item-size" style={{ opacity: 0.7, fontSize: 11, flexShrink: 0 }}>
+                                ({Math.round(m.fileSize / 1024)} KB)
+                              </span>
+                            </div>
+                          </div>
+
+                          {activeActionMediaId === m.id && (
+                            <div
+                              className="absolute top-full left-0 z-50 mt-1"
+                              style={{
+                                backgroundColor: "#1e293b",
+                                border: "1px solid #334155",
+                                borderRadius: 6,
+                                boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.3)",
+                                display: "flex",
+                                flexDirection: "column",
+                                padding: 6,
+                                gap: 4,
+                                minWidth: 140,
+                              }}
+                            >
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActivePreviewMedia(m);
+                                  setActiveActionMediaId(null);
+                                }}
+                                style={{
+                                  background: "transparent",
+                                  border: "none",
+                                  color: "#fff",
+                                  padding: "6px 8px",
+                                  textAlign: "left",
+                                  cursor: "pointer",
+                                  borderRadius: 4,
+                                  fontSize: 12,
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.05)"}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                              >
+                                Preview
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDownload(m);
+                                  setActiveActionMediaId(null);
+                                }}
+                                style={{
+                                  background: "transparent",
+                                  border: "none",
+                                  color: "#fff",
+                                  padding: "6px 8px",
+                                  textAlign: "left",
+                                  cursor: "pointer",
+                                  borderRadius: 4,
+                                  fontSize: 12,
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.05)"}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                              >
+                                Download
+                              </button>
+                            </div>
+                          )}
+                          
+                          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 8 }}>
+                            {/* Replace File */}
+                            <input
+                              type="file"
+                              id={`replace-input-${m.id}`}
+                              style={{ display: "none" }}
+                              onChange={async (e) => {
+                                const selectedFile = e.target.files?.[0];
+                                if (!selectedFile) return;
+
+                                const formData = new FormData();
+                                formData.append("file", selectedFile);
+                                
+                                try {
+                                  setMediaLoading(true);
+                                  await httpClient.delete(`/media/${m.id}`, { params: { planId } });
+                                  await httpClient.post(`/items/${taskId}/media`, formData, {
+                                    params: { planId },
+                                    headers: { "Content-Type": "multipart/form-data" },
+                                  });
+                                  await fetchMedia();
+                                } catch (err) {
+                                  console.error("Failed to replace attachment:", err);
+                                } finally {
+                                  setMediaLoading(false);
+                                }
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => document.getElementById(`replace-input-${m.id}`)?.click()}
+                              style={{
+                                background: "rgba(255,255,255,0.05)",
+                                border: "1px solid var(--border-color)",
+                                padding: "4px 8px",
+                                borderRadius: 4,
+                                fontSize: 11,
+                                cursor: "pointer",
+                                color: "var(--text-color)",
+                              }}
+                            >
+                              Change File
+                            </button>
+                            
+                            <button
+                              type="button"
+                              className="media-delete-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteMedia(m.id);
+                              }}
+                              title="Delete Attachment"
+                              style={{
+                                background: "rgba(239, 68, 68, 0.1)",
+                                border: "none",
+                                padding: "4px 8px",
+                                borderRadius: 4,
+                                cursor: "pointer",
+                                color: "#ef4444",
+                                display: "flex",
+                                alignItems: "center",
+                                fontSize: 11,
+                              }}
+                            >
+                              <Trash2 size={12} style={{ marginRight: 4 }} />
+                              Delete
+                            </button>
+                          </div>
                         </div>
+                      ))}
+                      {/* Smaller drag & drop container for adding more files */}
+                      <div
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          setIsAttachmentDragOver(true);
+                        }}
+                        onDragLeave={() => setIsAttachmentDragOver(false)}
+                        onDrop={async (e) => {
+                          e.preventDefault();
+                          setIsAttachmentDragOver(false);
+                          if (e.dataTransfer.files) {
+                            await handleAttachmentsUpload(e.dataTransfer.files);
+                          }
+                        }}
+                        onClick={() => attachmentFileInputRef.current?.click()}
+                        style={{
+                          border: isAttachmentDragOver ? "2px dashed var(--primary, #0ea5e9)" : "1.5px dashed var(--border-color, #334155)",
+                          borderRadius: 6,
+                          height: 60,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          cursor: "pointer",
+                          backgroundColor: isAttachmentDragOver ? "rgba(14, 165, 233, 0.05)" : "rgba(255,255,255,0.01)",
+                          transition: "border-color 0.2s, background-color 0.2s",
+                          color: "var(--text-muted)",
+                          gap: 8,
+                          marginTop: 12,
+                        }}
+                      >
+                        <span style={{ fontSize: 18, fontWeight: 300 }}>+</span>
+                        <span style={{ fontSize: 11 }}>Add More Files</span>
+                        <input
+                          type="file"
+                          ref={attachmentFileInputRef}
+                          style={{ display: "none" }}
+                          multiple
+                          onChange={(e) => {
+                            if (e.target.files) handleAttachmentsUpload(e.target.files);
+                          }}
+                        />
                       </div>
-                    ))
+                    </>
                   )}
                 </div>
               )}
-
-              {/* Direct File Upload button */}
-              <div style={{ marginTop: 16 }}>
-                <input
-                  type="file"
-                  id="task-file-upload-input"
-                  style={{ display: "none" }}
-                  multiple
-                  onChange={async (e) => {
-                    const selectedFiles = e.target.files;
-                    if (!selectedFiles || selectedFiles.length === 0) return;
-
-                    setMediaLoading(true);
-                    try {
-                      for (let i = 0; i < selectedFiles.length; i++) {
-                        const formData = new FormData();
-                        formData.append("file", selectedFiles[i]);
-                        await httpClient.post(`/items/${taskId}/media`, formData, {
-                          params: { planId },
-                          headers: { "Content-Type": "multipart/form-data" },
-                        });
-                      }
-                      await fetchMedia();
-                    } catch (err) {
-                      console.error("Failed to upload file attachments:", err);
-                    } finally {
-                      setMediaLoading(false);
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  className="media-upload-btn"
-                  onClick={() => document.getElementById("task-file-upload-input")?.click()}
-                  style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "center", width: "100%", padding: "10px 16px" }}
-                >
-                  <Paperclip size={14} />
-                  {media.length === 0 ? "Upload File" : "+ Add More"}
-                </button>
-              </div>
             </div>
           </div>
 
@@ -972,24 +1036,58 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                       No comments yet. Write the first one!
                     </span>
                   ) : (
-                    comments.map((c) => (
-                      <div key={c.id} className="comment-bubble">
-                        <div className="comment-header">
-                          <span className="comment-author">{c.authorId?.name || "Collaborator"}</span>
-                          <span className="comment-date">
-                            {new Date(c.createdAt).toLocaleDateString()}
-                          </span>
+                    comments.map((c) => {
+                      const authorName = c.authorId?.name || "Collaborator";
+                      const avatarUrl = c.authorId?.avatarUrl;
+                      return (
+                        <div key={c.id} className="comment-bubble" style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                          {avatarUrl ? (
+                            <img
+                              src={avatarUrl}
+                              alt={authorName}
+                              style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", flexShrink: 0, marginTop: 2 }}
+                            />
+                          ) : (
+                            <div
+                              style={{
+                                width: 28,
+                                height: 28,
+                                borderRadius: "50%",
+                                backgroundColor: "var(--primary, #0ea5e9)",
+                                color: "#fff",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontSize: 11,
+                                fontWeight: 600,
+                                flexShrink: 0,
+                                marginTop: 2,
+                              }}
+                            >
+                              {getInitials(authorName)}
+                            </div>
+                          )}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div className="comment-header">
+                              <span className="comment-author" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {authorName}
+                              </span>
+                              <span className="comment-date">
+                                {new Date(c.createdAt).toLocaleDateString()}
+                              </span>
+                            </div>
+                            <div className="comment-body" style={{ wordBreak: "break-word" }}>{c.content}</div>
+                          </div>
+                          <button
+                            className="comment-delete-btn"
+                            onClick={() => handleDeleteComment(c.id)}
+                            title="Delete Comment"
+                          >
+                            <Trash2 size={12} />
+                          </button>
                         </div>
-                        <div className="comment-body">{c.content}</div>
-                        <button
-                          className="comment-delete-btn"
-                          onClick={() => handleDeleteComment(c.id)}
-                          title="Delete Comment"
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               )}

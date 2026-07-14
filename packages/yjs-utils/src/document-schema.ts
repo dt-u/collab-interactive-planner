@@ -21,7 +21,7 @@ export interface YjsPlannerItem {
   assignees: string[];
   time?: string;  // e.g. "10:00 AM"
   cost?: string;  // e.g. "300k VND"
-  image?: string; // thumbnail or card cover URL
+  coverImage?: string; // thumbnail or card cover URL
   commentCount?: number;
 }
 

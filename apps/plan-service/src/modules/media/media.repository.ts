@@ -7,7 +7,7 @@ export class MediaRepository {
   }
 
   async findByItem(itemId: string): Promise<IMedia[]> {
-    return MediaModel.find({ itemId }).sort({ createdAt: 1 }).exec();
+    return MediaModel.find({ itemId, isCover: { $ne: true } }).sort({ createdAt: 1 }).exec();
   }
 
   async create(

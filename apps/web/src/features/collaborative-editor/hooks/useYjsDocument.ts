@@ -17,8 +17,9 @@ export interface TaskState {
   assignees: string[];
   time?: string;
   cost?: string;
-  image?: string;
+  coverImage?: string;
   commentCount?: number;
+  commentMetadata?: string;
 }
 
 export interface ColumnMetadata {
@@ -49,8 +50,9 @@ export function useYjsDocument(yDoc: Y.Doc | undefined, taskId: string) {
         assignees: map.get("assignees") || [],
         time: map.get("time") || "",
         cost: map.get("cost") || "",
-        image: map.get("image") || "",
+        coverImage: map.get("coverImage") || "",
         commentCount: map.get("commentCount"),
+        commentMetadata: map.get("commentMetadata") || "",
       };
     };
 

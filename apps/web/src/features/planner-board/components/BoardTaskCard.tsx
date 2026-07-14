@@ -6,6 +6,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { useYjsDocument } from "../../collaborative-editor/hooks/useYjsDocument.js";
 import { Clock, MessageSquare, Trash2 } from "lucide-react";
 import { httpClient } from "../../../shared/api/http-client.js";
+import { useAuth } from "../../../app/providers/AuthProvider.js";
 
 
 interface BoardTaskCardProps {
@@ -32,22 +33,38 @@ export const BoardTaskCard: React.FC<BoardTaskCardProps> = ({
   onDelete,
 }) => {
   const { planId } = useParams<{ planId: string }>();
+  const { user: currentUser } = useAuth();
   const { task } = useYjsDocument(yDoc, taskId);
   const [fallbackImage, setFallbackImage] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
-    if (!task) return;
-    const totalCount = task.commentCount || 0;
-    const readCount = Number(localStorage.getItem(`read_comments_${taskId}`) || 0);
-    const unread = Math.max(0, totalCount - readCount);
-    setUnreadCount(unread);
-  }, [task, task?.commentCount, taskId]);
+    if (!task || !currentUser) return;
 
-  // Fetch attachments to use as cover fallback if task.image is empty
+    const readIdsRaw = localStorage.getItem(`read_comments_ids_${taskId}`);
+    const readIds: string[] = readIdsRaw ? JSON.parse(readIdsRaw) : [];
+
+    let metadata: Array<{ id: string; authorId: string }> = [];
+    if (task.commentMetadata) {
+      try {
+        metadata = JSON.parse(task.commentMetadata);
+      } catch (e) {
+        console.error("Failed to parse task commentMetadata:", e);
+      }
+    }
+
+    // Filter out comments posted by the current user
+    const otherComments = metadata.filter((c) => c.authorId !== currentUser.id);
+
+    // Count comments not present in readIds
+    const unread = otherComments.filter((c) => !readIds.includes(c.id)).length;
+    setUnreadCount(unread);
+  }, [task, task?.commentMetadata, taskId, currentUser]);
+
+  // Fetch attachments to use as cover fallback if task.coverImage is empty
   useEffect(() => {
     const fetchAttachmentsFallback = async () => {
-      if (!task || task.image) return;
+      if (!task || task.coverImage) return;
       try {
         const res = await httpClient.get(`/items/${taskId}/media`, { params: { planId } });
         const mediaList = res.data?.data || [];
@@ -64,7 +81,7 @@ export const BoardTaskCard: React.FC<BoardTaskCardProps> = ({
     };
 
     fetchAttachmentsFallback();
-  }, [taskId, task?.image, planId]);
+  }, [taskId, task?.coverImage, planId]);
 
   const {
     attributes,
@@ -88,7 +105,7 @@ export const BoardTaskCard: React.FC<BoardTaskCardProps> = ({
 
   if (!task) return null;
 
-  const coverSrc = task.image || fallbackImage;
+  const coverSrc = task.coverImage || fallbackImage;
 
   // Inline color mappings matching the day badge themes
   const accentColorMap = {
@@ -106,7 +123,14 @@ export const BoardTaskCard: React.FC<BoardTaskCardProps> = ({
       className={`whiteboard-task-card ${isFocusedByRemote ? "card-focused-remote" : ""}`}
       onClick={() => {
         if (task) {
-          localStorage.setItem(`read_comments_${taskId}`, String(task.commentCount || 0));
+          let metadata: Array<{ id: string; authorId: string }> = [];
+          if (task.commentMetadata) {
+            try {
+              metadata = JSON.parse(task.commentMetadata);
+            } catch (e) {}
+          }
+          const allIds = metadata.map((c) => c.id);
+          localStorage.setItem(`read_comments_ids_${taskId}`, JSON.stringify(allIds));
           setUnreadCount(0);
         }
         onClick();

@@ -76,6 +76,7 @@ export class MediaService {
       fileUrl: string;
       fileSize: number;
       mimeType: string;
+      isCover?: boolean;
     },
     planId?: string,
   ): Promise<MediaDto> {
@@ -88,6 +89,7 @@ export class MediaService {
       fileSize: data.fileSize,
       mimeType: data.mimeType,
       uploaderId: uploaderId as any,
+      isCover: data.isCover || false,
     });
 
     return MediaMapper.toDto(media);

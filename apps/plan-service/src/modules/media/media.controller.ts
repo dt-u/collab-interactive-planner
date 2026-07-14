@@ -20,6 +20,7 @@ export class MediaController {
       }
 
       const planId = (req.query.planId || req.body.planId) as string;
+      const isCover = req.query.isCover === "true";
       
       let payload = req.body;
       if (req.file) {
@@ -28,6 +29,12 @@ export class MediaController {
           fileUrl: `/api/uploads/${req.file.filename}`,
           fileSize: req.file.size,
           mimeType: req.file.mimetype,
+          isCover,
+        };
+      } else {
+        payload = {
+          ...payload,
+          isCover,
         };
       }
 

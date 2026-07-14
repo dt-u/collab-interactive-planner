@@ -8,6 +8,7 @@ export interface IMedia extends Document {
   fileSize: number;
   mimeType: string;
   uploaderId: mongoose.Types.ObjectId;
+  isCover?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -24,6 +25,7 @@ const MediaSchema = new Schema<IMedia>(
     fileSize: { type: Number, required: true },
     mimeType: { type: String, required: true },
     uploaderId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    isCover: { type: Boolean, default: false },
   },
   { timestamps: true },
 );
